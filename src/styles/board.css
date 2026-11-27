@@ -1,0 +1,568 @@
+/* ==========================================================================
+   Board, Tiles, Snakes & Ladders SVG, Sculpted Pawns, On-Board FX
+   ========================================================================== */
+
+.board-stage {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.board-frame {
+  position: relative;
+  width: 100%;
+  max-width: min(760px, calc(100dvh - 110px));
+  aspect-ratio: 1 / 1;
+  padding: clamp(10px, 1.8vw, 18px);
+  border-radius: var(--r-xl);
+  background:
+    repeating-linear-gradient(
+      115deg,
+      rgba(255, 224, 175, 0.04) 0 3px,
+      rgba(0, 0, 0, 0.06) 3px 7px,
+      transparent 7px 14px
+    ),
+    linear-gradient(155deg, #6b3f24 0%, #4a2c1a 48%, #2c180d 100%);
+  box-shadow:
+    0 0 0 2px var(--brass-700),
+    0 0 0 4px var(--walnut-950),
+    inset 0 2px 1px rgba(255, 228, 178, 0.28),
+    inset 0 -3px 6px rgba(18, 9, 4, 0.65),
+    0 22px 48px rgba(10, 5, 2, 0.58),
+    0 6px 14px rgba(10, 5, 2, 0.42);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Corner brass rivets */
+.board-frame::before,
+.board-frame::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: calc(var(--r-xl) - 6px);
+  pointer-events: none;
+}
+
+.board-frame::before {
+  border: 1.5px solid rgba(220, 185, 68, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(42, 22, 10, 0.55);
+}
+
+.board-frame::after {
+  background:
+    radial-gradient(circle at 8px 8px, var(--brass-200) 0 2px, var(--brass-600) 3px, var(--walnut-900) 4.5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 8px) 8px, var(--brass-200) 0 2px, var(--brass-600) 3px, var(--walnut-900) 4.5px, transparent 5px),
+    radial-gradient(circle at 8px calc(100% - 8px), var(--brass-200) 0 2px, var(--brass-600) 3px, var(--walnut-900) 4.5px, transparent 5px),
+    radial-gradient(circle at calc(100% - 8px) calc(100% - 8px), var(--brass-200) 0 2px, var(--brass-600) 3px, var(--walnut-900) 4.5px, transparent 5px);
+}
+
+.board-frame-inlay {
+  position: absolute;
+  inset: clamp(8px, 1.4vw, 14px);
+  border-radius: calc(var(--r-md) + 2px);
+  box-shadow:
+    inset 0 2px 6px rgba(16, 8, 4, 0.72),
+    0 1px 0 rgba(255, 226, 175, 0.2);
+  pointer-events: none;
+}
+
+.board-surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--r-md);
+  background: var(--tile-ivory);
+  z-index: var(--z-board);
+  will-change: transform;
+}
+
+/* ---------- 10x10 Sunlit Tile Grid ---------- */
+.tile-grid {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 2px rgba(74, 44, 26, 0.35);
+}
+
+.tile {
+  position: absolute;
+  width: 10%;
+  height: 10%;
+  padding: clamp(2px, 0.45vw, 5px);
+  border-right: 1px solid rgba(90, 62, 34, 0.16);
+  border-bottom: 1px solid rgba(90, 62, 34, 0.16);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background-color: var(--tile-ivory);
+}
+
+.tile::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(155deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0) 48%, rgba(74, 44, 26, 0.06) 100%);
+  pointer-events: none;
+}
+
+.tile-ivory {
+  background-color: var(--tile-ivory);
+}
+
+.tile-ivory-alt {
+  background-color: var(--tile-ivory-2);
+}
+
+.tile-sage {
+  background: linear-gradient(155deg, #d3e5b8 0%, var(--tile-sage) 55%, var(--tile-sage-2) 100%);
+}
+
+.tile-terracotta {
+  background: linear-gradient(155deg, #f6c4a4 0%, var(--tile-terracotta) 55%, var(--tile-terracotta-2) 100%);
+}
+
+.tile-sky {
+  background: linear-gradient(155deg, #cce6f4 0%, var(--tile-sky) 55%, var(--tile-sky-2) 100%);
+}
+
+.tile-gold {
+  background: linear-gradient(145deg, #fff0ad 0%, var(--tile-gold) 48%, var(--tile-gold-2) 100%);
+  box-shadow: inset 0 0 0 1.5px rgba(176, 138, 30, 0.55);
+}
+
+.tile-crown {
+  background:
+    radial-gradient(circle at 50% 45%, #fff9d6 0%, #f8d86c 52%, #d49b24 100%);
+  box-shadow: inset 0 0 0 2px var(--brass-700);
+}
+
+.tile-num {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(9px, 1.35vw, 14px);
+  line-height: 1;
+  color: rgba(43, 29, 18, 0.72);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.tile-gold .tile-num,
+.tile-crown .tile-num {
+  color: #5b3b08;
+}
+
+.tile-crown-icon {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #8f5c08;
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.tile-crown-icon svg {
+  width: 52%;
+  height: 52%;
+  filter: drop-shadow(0 1px 0 rgba(255, 250, 210, 0.8));
+}
+
+.tile-gold-icon {
+  position: absolute;
+  right: 8%;
+  bottom: 8%;
+  width: 30%;
+  height: 30%;
+  color: #8f6410;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.tile-gold-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.tile-chevron {
+  position: absolute;
+  right: 6%;
+  top: 5%;
+  font-size: clamp(7px, 0.9vw, 10px);
+  line-height: 1;
+  color: rgba(74, 44, 26, 0.35);
+  pointer-events: none;
+}
+
+.tile.has-ladder::after,
+.tile.has-snake::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 68%;
+  height: 68%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.tile.has-ladder::after {
+  background: radial-gradient(circle, rgba(246, 214, 117, 0.32) 0%, transparent 72%);
+}
+
+.tile.has-snake::after {
+  background: radial-gradient(circle, rgba(194, 69, 58, 0.2) 0%, transparent 72%);
+}
+
+/* ---------- Start Pad (tile 0) ---------- */
+.start-pad {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: var(--grad-brass);
+  color: var(--walnut-900);
+  font-family: var(--font-display);
+  font-size: clamp(7px, 0.95vw, 10px);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  box-shadow: 0 1px 4px rgba(26, 15, 9, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.88;
+}
+
+/* ---------- SVG Snakes & Ladders Layer ---------- */
+.portal-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: var(--z-portals);
+  pointer-events: none;
+  overflow: visible;
+}
+
+.ladder-shadow line {
+  stroke: rgba(26, 15, 9, 0.24);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+
+.ladder-shadow .ladder-shadow-rung {
+  stroke-width: 0.72;
+}
+
+.ladder-shimmer line {
+  stroke: #fff3b0;
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  opacity: 0;
+}
+
+.snake-shadow {
+  fill: rgba(26, 15, 9, 0.24);
+}
+
+.snake-body {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.snake-head {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.snake-mouth {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: 0% 50%;
+}
+
+.snake-jaw-upper,
+.snake-jaw-lower {
+  transform-box: fill-box;
+  transform-origin: 0% 50%;
+}
+
+.snake-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.snake-tongue {
+  transform-box: fill-box;
+  transform-origin: 0% 50%;
+  opacity: 0.85;
+}
+
+/* ---------- Sculpted Pawns Layer ---------- */
+.pawn-layer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-pawns);
+  pointer-events: none;
+}
+
+.pawn-anchor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 10%;
+  height: 10%;
+  will-change: transform;
+  z-index: 1;
+}
+
+.pawn-anchor.is-active {
+  z-index: 5;
+}
+
+.pawn-anchor.is-away {
+  opacity: 0.55;
+  filter: grayscale(0.35);
+}
+
+.pawn-ground {
+  position: absolute;
+  left: 50%;
+  top: 66%;
+  width: 0;
+  height: 0;
+}
+
+.pawn-shadow {
+  position: absolute;
+  width: clamp(18px, 3.8vw, 34px);
+  height: clamp(8px, 1.5vw, 13px);
+  margin-left: calc(clamp(18px, 3.8vw, 34px) / -2);
+  margin-top: calc(clamp(8px, 1.5vw, 13px) / -2);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(22, 12, 6, 0.52) 0%, rgba(22, 12, 6, 0.22) 55%, transparent 75%);
+  will-change: transform, opacity;
+}
+
+.pawn-halo {
+  position: absolute;
+  width: clamp(28px, 6.2vw, 54px);
+  height: clamp(16px, 3.2vw, 28px);
+  margin-left: calc(clamp(28px, 6.2vw, 54px) / -2);
+  margin-top: calc(clamp(16px, 3.2vw, 28px) / -2);
+  border-radius: 50%;
+  border: 2.5px solid var(--pc, var(--brass-400));
+  box-shadow: 0 0 12px var(--pglow, rgba(246, 214, 117, 0.7)), inset 0 0 8px var(--pglow, rgba(246, 214, 117, 0.5));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pawn-anchor.is-active .pawn-halo {
+  opacity: 0.92;
+}
+
+.pawn-ripple {
+  position: absolute;
+  width: clamp(24px, 5vw, 44px);
+  height: clamp(12px, 2.4vw, 22px);
+  margin-left: calc(clamp(24px, 5vw, 44px) / -2);
+  margin-top: calc(clamp(12px, 2.4vw, 22px) / -2);
+  border-radius: 50%;
+  border: 2px solid var(--pc, var(--brass-300));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pawn-bulge {
+  position: absolute;
+  width: clamp(26px, 5.2vw, 46px);
+  height: clamp(26px, 5.2vw, 46px);
+  margin-left: calc(clamp(26px, 5.2vw, 46px) / -2);
+  margin-top: calc(clamp(26px, 5.2vw, 46px) / -2);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--pglow, rgba(255, 255, 255, 0.5)) 0%, transparent 70%);
+  opacity: 0;
+}
+
+.pawn-lift {
+  position: absolute;
+  left: 50%;
+  top: 66%;
+  width: clamp(24px, 4.8vw, 42px);
+  height: clamp(31px, 6.2vw, 55px);
+  margin-left: calc(clamp(24px, 4.8vw, 42px) / -2);
+  margin-top: calc(clamp(31px, 6.2vw, 55px) * -0.88);
+  will-change: transform;
+}
+
+.pawn-token {
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 88%;
+  will-change: transform;
+}
+
+.pawn-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 2px rgba(26, 15, 9, 0.38));
+}
+
+.pawn-dizzy {
+  position: absolute;
+  left: 50%;
+  top: -12px;
+  width: 34px;
+  height: 16px;
+  margin-left: -17px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #ffe262;
+  text-shadow: 0 1px 2px rgba(43, 29, 18, 0.85);
+  pointer-events: none;
+}
+
+/* ---------- On-Board FX Layer ---------- */
+.fx-layer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-fx);
+  pointer-events: none;
+  overflow: visible;
+}
+
+.fx-sparkle,
+.fx-dust {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.fx-sparkle i {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: #fff4b8;
+  box-shadow: 0 0 8px #ffd84a;
+}
+
+.fx-sparkle.fx-good i {
+  background: #b7ffcf;
+  box-shadow: 0 0 8px #3d9a5b;
+}
+
+.fx-sparkle.fx-bad i {
+  background: #ffc0b8;
+  box-shadow: 0 0 8px #e04a3e;
+}
+
+.fx-dust i {
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(251, 241, 218, 0.85);
+}
+
+.fx-callout {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+  z-index: 6;
+}
+
+.fx-callout span {
+  display: inline-block;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(0.85rem, 1.8vw, 1.12rem);
+  letter-spacing: 0.04em;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(20, 10, 4, 0.65);
+  box-shadow: 0 4px 14px rgba(18, 9, 4, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.fx-callout.fx-good span {
+  background: linear-gradient(180deg, #43b868, #247c41);
+  border: 2px solid #d5f9de;
+}
+
+.fx-callout.fx-bad span {
+  background: linear-gradient(180deg, #e75c4f, #a92a20);
+  border: 2px solid #ffd8d3;
+}
+
+.fx-callout.fx-gold span {
+  background: var(--grad-brass);
+  color: var(--walnut-900);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+  border: 2px solid #fff4c2;
+}
+
+.fx-callout.fx-epic span {
+  background: linear-gradient(180deg, #b86df0, #7630ad);
+  border: 2px solid #f0dcff;
+}
+
+.fx-callout.fx-neutral span {
+  background: var(--grad-walnut);
+  border: 2px solid var(--brass-400);
+}
+
+.fx-banner {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  z-index: 8;
+  white-space: nowrap;
+}
+
+.fx-banner span {
+  display: inline-block;
+  padding: 10px 24px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.15rem, 2.8vw, 1.7rem);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: 0 10px 28px rgba(15, 8, 3, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.fx-banner.fx-gold span {
+  background: var(--grad-brass);
+  color: var(--walnut-950);
+  border: 3px solid #fff7d4;
+}
+
+.fx-banner.fx-good span {
+  background: linear-gradient(180deg, #4ac270, #23793e);
+  color: #fff;
+  border: 3px solid #d7fbe1;
+}
+
+.fx-banner.fx-bad span {
+  background: linear-gradient(180deg, #ec6052, #9e241b);
+  color: #fff;
+  border: 3px solid #ffd6d0;
+}
+
+.fx-banner.fx-epic span {
+  background: linear-gradient(180deg, #c074f6, #6d2ca3);
+  color: #fff;
+  border: 3px solid #f2e0ff;
+}

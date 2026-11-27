@@ -1,0 +1,423 @@
+/* ==========================================================================
+   Motion & Keyframes (transform + opacity only, plus active timer stroke)
+   ========================================================================== */
+
+/* ---------- Snakes living motion ---------- */
+@keyframes snake-breathe {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  50% {
+    transform: scale(1.018, 0.986);
+  }
+}
+
+@keyframes snake-blink {
+  0%,
+  91%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+
+@keyframes snake-tongue-flick {
+  0%,
+  72%,
+  100% {
+    transform: scaleX(0.15);
+    opacity: 0;
+  }
+  78%,
+  86% {
+    transform: scaleX(1);
+    opacity: 0.95;
+  }
+  82% {
+    transform: scaleX(0.65) rotate(8deg);
+    opacity: 0.9;
+  }
+  90% {
+    transform: scaleX(1.05) rotate(-6deg);
+    opacity: 0.95;
+  }
+}
+
+@keyframes snake-jaw-upper-bite {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20%,
+  55% {
+    transform: rotate(-28deg);
+  }
+  70% {
+    transform: rotate(4deg);
+  }
+}
+
+@keyframes snake-jaw-lower-bite {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20%,
+  55% {
+    transform: rotate(28deg);
+  }
+  70% {
+    transform: rotate(-4deg);
+  }
+}
+
+@keyframes snake-mouth-open {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  20%,
+  55% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+@keyframes snake-bulge {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  30% {
+    transform: scale(1.06, 1.04);
+  }
+  65% {
+    transform: scale(0.98, 1.05);
+  }
+}
+
+.snake-body {
+  animation: snake-breathe 4.4s var(--ease-in-out) var(--snake-delay, 0s) infinite;
+}
+
+.snake-eye {
+  animation: snake-blink 5.2s linear var(--snake-delay, 0s) infinite;
+}
+
+.snake-tongue {
+  animation: snake-tongue-flick 4.8s ease-in-out var(--snake-delay, 0s) infinite;
+}
+
+.snake.is-active .snake-body {
+  animation: snake-bulge 0.55s var(--ease-spring) 2;
+}
+
+.snake.is-active .snake-jaw-upper {
+  animation: snake-jaw-upper-bite 0.72s var(--ease-out) 1;
+}
+
+.snake.is-active .snake-jaw-lower {
+  animation: snake-jaw-lower-bite 0.72s var(--ease-out) 1;
+}
+
+.snake.is-active .snake-mouth {
+  animation: snake-mouth-open 0.72s var(--ease-out) 1;
+}
+
+/* ---------- Ladder golden shimmer ---------- */
+@keyframes ladder-shimmer-pulse {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  35%,
+  65% {
+    opacity: 0.85;
+  }
+}
+
+.ladder.is-active .ladder-shimmer line {
+  animation: ladder-shimmer-pulse 0.75s ease-in-out 2;
+}
+
+/* ---------- Pawn animations ---------- */
+@keyframes pawn-halo-pulse {
+  0%,
+  100% {
+    transform: scale(0.94);
+    opacity: 0.72;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
+
+@keyframes pawn-idle-bob {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -3px, 0);
+  }
+}
+
+@keyframes pawn-ripple-burst {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.85);
+    opacity: 0;
+  }
+}
+
+@keyframes pawn-dizzy-orbit {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(0, -3px, 0) rotate(180deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) rotate(360deg);
+  }
+}
+
+.pawn-anchor.is-active .pawn-halo {
+  animation: pawn-halo-pulse 1.5s var(--ease-in-out) infinite;
+}
+
+.pawn-anchor.is-active:not(.is-moving) .pawn-token {
+  animation: pawn-idle-bob 1.8s var(--ease-in-out) infinite;
+}
+
+.pawn-ripple.is-popping {
+  animation: pawn-ripple-burst 0.42s var(--ease-out) forwards;
+}
+
+.pawn-dizzy {
+  animation: pawn-dizzy-orbit 1.1s linear infinite;
+}
+
+/* ---------- Board snake-bite shake ---------- */
+@keyframes board-shake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  15% {
+    transform: translate3d(-6px, 3px, 0);
+  }
+  30% {
+    transform: translate3d(6px, -4px, 0);
+  }
+  45% {
+    transform: translate3d(-5px, -2px, 0);
+  }
+  65% {
+    transform: translate3d(4px, 3px, 0);
+  }
+  82% {
+    transform: translate3d(-2px, 1px, 0);
+  }
+}
+
+.board-surface.is-shaking {
+  animation: board-shake 0.42s var(--ease-out);
+}
+
+/* ---------- On-Board FX ---------- */
+@keyframes fx-sparkle-burst {
+  0% {
+    transform: rotate(var(--a)) translate3d(0, 0, 0) scale(0.4);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--a)) translate3d(34px, 0, 0) scale(0.95) rotate(135deg);
+    opacity: 0;
+  }
+}
+
+@keyframes fx-dust-puff {
+  0% {
+    transform: rotate(var(--a)) translate3d(0, 0, 0) scale(0.5);
+    opacity: 0.85;
+  }
+  100% {
+    transform: rotate(var(--a)) translate3d(20px, 0, 0) scale(1.25);
+    opacity: 0;
+  }
+}
+
+@keyframes fx-callout-rise {
+  0% {
+    transform: translate(-50%, -40%) scale(0.55);
+    opacity: 0;
+  }
+  18% {
+    transform: translate(-50%, -115%) scale(1.08);
+    opacity: 1;
+  }
+  75% {
+    transform: translate(-50%, -145%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -185%) scale(0.94);
+    opacity: 0;
+  }
+}
+
+@keyframes fx-banner-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.5);
+    opacity: 0;
+  }
+  16% {
+    transform: translate(-50%, -50%) scale(1.08);
+    opacity: 1;
+  }
+  26%,
+  78% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -62%) scale(0.92);
+    opacity: 0;
+  }
+}
+
+.fx-sparkle i {
+  animation: fx-sparkle-burst 0.68s var(--ease-out) var(--d, 0ms) forwards;
+}
+
+.fx-dust i {
+  animation: fx-dust-puff 0.42s var(--ease-out) forwards;
+}
+
+.fx-callout {
+  animation: fx-callout-rise 1.35s var(--ease-out) forwards;
+}
+
+.fx-banner {
+  animation: fx-banner-pop 1.5s var(--ease-out) forwards;
+}
+
+/* ---------- Dice Tray Shake & Glow ---------- */
+@keyframes die-shake {
+  0% {
+    transform: translate3d(-4px, -3px, 14px) rotate3d(1, 0.6, 0.3, -18deg);
+  }
+  25% {
+    transform: translate3d(5px, 2px, 18px) rotate3d(-0.4, 1, 0.6, 20deg);
+  }
+  50% {
+    transform: translate3d(-3px, 4px, 12px) rotate3d(0.7, -0.5, 1, 16deg);
+  }
+  75% {
+    transform: translate3d(4px, -4px, 20px) rotate3d(-0.8, -0.4, 0.5, -22deg);
+  }
+  100% {
+    transform: translate3d(-4px, -3px, 14px) rotate3d(1, 0.6, 0.3, -18deg);
+  }
+}
+
+@keyframes roll-btn-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.028);
+  }
+}
+
+@keyframes emote-bubble-float {
+  0% {
+    transform: translate3d(-50%, 6px, 0) scale(0.45);
+    opacity: 0;
+  }
+  16% {
+    transform: translate3d(-50%, -8px, 0) scale(1.12);
+    opacity: 1;
+  }
+  26%,
+  78% {
+    transform: translate3d(-50%, -12px, 0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(-50%, -28px, 0) scale(0.88);
+    opacity: 0;
+  }
+}
+
+@keyframes modal-enter {
+  0% {
+    transform: translate3d(0, 14px, 0) scale(0.95);
+    opacity: 0;
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 1;
+  }
+}
+
+.dice-tray.is-shaking .die-shake-wrap {
+  animation: die-shake 0.16s linear infinite;
+}
+
+.roll-btn.is-ready:not(:disabled) {
+  animation: roll-btn-pulse 1.9s var(--ease-in-out) infinite;
+}
+
+.emote-bubble {
+  animation: emote-bubble-float 2.4s var(--ease-out) forwards;
+}
+
+.modal {
+  animation: modal-enter 0.24s var(--ease-out);
+}
+
+/* ---------- Reduced Motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .snake-body,
+  .snake-eye,
+  .snake-tongue,
+  .snake.is-active .snake-body,
+  .snake.is-active .snake-jaw-upper,
+  .snake.is-active .snake-jaw-lower,
+  .snake.is-active .snake-mouth,
+  .ladder.is-active .ladder-shimmer line,
+  .pawn-anchor.is-active .pawn-halo,
+  .pawn-anchor.is-active:not(.is-moving) .pawn-token,
+  .pawn-dizzy,
+  .board-surface.is-shaking,
+  .dice-tray.is-shaking .die-shake-wrap,
+  .roll-btn.is-ready:not(:disabled),
+  .modal {
+    animation: none !important;
+  }
+
+  .fx-callout,
+  .fx-banner,
+  .emote-bubble {
+    animation-duration: 0.01ms !important;
+  }
+
+  .fx-sparkle,
+  .fx-dust {
+    display: none;
+  }
+}

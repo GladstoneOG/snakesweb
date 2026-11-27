@@ -1,0 +1,16 @@
+{
+  "name": "Snakes & Ladders",
+  "short_name": "SnakesWeb",
+  "description": "Multiplayer Snakes & Ladders with 3D dice, living board, and instant online rooms.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#24150e",
+  "theme_color": "#2d1b12",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

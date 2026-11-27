@@ -1,0 +1,127 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap');
+
+/* ==========================================================================
+   Enchanted Tabletop Toybox — design tokens
+   ========================================================================== */
+:root {
+  /* Hardwood & brass */
+  --walnut-950: #1a0f09;
+  --walnut-900: #24150d;
+  --walnut-800: #331e12;
+  --walnut-700: #4a2c1a;
+  --walnut-600: #5d3821;
+  --walnut-500: #74472a;
+  --walnut-400: #956039;
+  --cedar-400: #c98a52;
+  --cedar-300: #e0ac74;
+  --bamboo-300: #e9d08a;
+
+  --brass-800: #6e5410;
+  --brass-700: #8f6f14;
+  --brass-600: #b08a1e;
+  --brass-500: #c9a227;
+  --brass-400: #dcb944;
+  --brass-300: #ecd27a;
+  --brass-200: #f6e6ae;
+
+  /* Sunlit tiles */
+  --tile-ivory: #fbf3df;
+  --tile-ivory-2: #f4e7c6;
+  --tile-sage: #c4d8a6;
+  --tile-sage-2: #aac68a;
+  --tile-terracotta: #eeb08c;
+  --tile-terracotta-2: #e19470;
+  --tile-sky: #b5d8ea;
+  --tile-sky-2: #93c3dc;
+  --tile-gold: #f6d675;
+  --tile-gold-2: #e2b33a;
+
+  /* Parchment & ink */
+  --parchment: #fbf1da;
+  --parchment-2: #f1e1bb;
+  --parchment-3: #e5cf9d;
+  --ink: #2b1d12;
+  --ink-soft: #5a4532;
+  --ink-mute: #8a735b;
+
+  /* Velvet & felt */
+  --velvet-900: #2e0b16;
+  --velvet-700: #5a1a2c;
+  --velvet-500: #84283f;
+  --felt-800: #143a2d;
+  --felt-600: #1f5a44;
+
+  /* Feedback */
+  --good: #3d9a5b;
+  --good-soft: #d6efd9;
+  --bad: #c2453a;
+  --bad-soft: #f7d8d2;
+  --epic: #b47be0;
+  --epic-soft: #ecdcf9;
+  --info: #3a7bb8;
+
+  /* Pawns (mirror of PAWN_PALETTES; used for CSS-only bits) */
+  --pawn-ruby: #e0384f;
+  --pawn-sapphire: #2f6fe0;
+  --pawn-emerald: #1fae6b;
+  --pawn-amber: #f0a020;
+  --pawn-plum: #9b4fd0;
+  --pawn-teal: #14b3b0;
+
+  /* Type */
+  --font-display: 'Fredoka', 'Baloo 2', 'Trebuchet MS', system-ui, sans-serif;
+  --font-body: 'Nunito', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Consolas, monospace;
+
+  /* Radii */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-pill: 999px;
+
+  /* Spacing */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-8: 32px;
+  --s-10: 40px;
+
+  /* Shadows */
+  --sh-soft: 0 2px 6px rgba(26, 15, 9, 0.18), 0 8px 24px rgba(26, 15, 9, 0.18);
+  --sh-lift: 0 4px 10px rgba(26, 15, 9, 0.25), 0 18px 40px rgba(26, 15, 9, 0.32);
+  --sh-inset: inset 0 2px 6px rgba(26, 15, 9, 0.35);
+  --sh-brass: 0 0 0 1px var(--brass-700), inset 0 1px 0 rgba(255, 246, 210, 0.7), inset 0 -2px 0 rgba(110, 84, 16, 0.55);
+
+  /* Gradients */
+  --grad-brass: linear-gradient(180deg, #f7e3a0 0%, #dcb944 38%, #b08a1e 70%, #8f6f14 100%);
+  --grad-brass-hover: linear-gradient(180deg, #fff0bf 0%, #e8c95a 38%, #c39a26 70%, #9c7a18 100%);
+  --grad-walnut: linear-gradient(160deg, #6a4026 0%, #4a2c1a 45%, #331e12 100%);
+  --grad-parchment: linear-gradient(180deg, #fff8e6 0%, #fbf1da 40%, #f1e1bb 100%);
+  --grad-velvet: radial-gradient(120% 90% at 50% 30%, #84283f 0%, #5a1a2c 55%, #2e0b16 100%);
+  --grad-felt: radial-gradient(120% 90% at 50% 30%, #2a7458 0%, #1f5a44 50%, #143a2d 100%);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-med: 220ms;
+  --dur-slow: 420ms;
+
+  /* Layers */
+  --z-board: 1;
+  --z-portals: 2;
+  --z-pawns: 3;
+  --z-fx: 4;
+  --z-hud: 10;
+  --z-toast: 40;
+  --z-modal: 50;
+  --z-confetti: 60;
+
+  color-scheme: light;
+}

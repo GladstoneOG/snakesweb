@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3c2317" />
+      <stop offset="100%" stop-color="#1e110a" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f6d37b" />
+      <stop offset="100%" stop-color="#c48a2b" />
+    </linearGradient>
+    <linearGradient id="snake" x1="14" y1="14" x2="50" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)" stroke="url(#gold)" stroke-width="3" />
+  <!-- Ladder -->
+  <g stroke="#e7b45c" stroke-width="3" stroke-linecap="round">
+    <line x1="18" y1="48" x2="29" y2="16" />
+    <line x1="27" y1="51" x2="38" y2="19" />
+    <line x1="20.5" y1="42" x2="29.5" y2="45" stroke-width="2.4" />
+    <line x1="23.5" y1="33" x2="32.5" y2="36" stroke-width="2.4" />
+    <line x1="26.5" y1="24" x2="35.5" y2="27" stroke-width="2.4" />
+  </g>
+  <!-- Coiled Emerald Snake -->
+  <path
+    d="M46 16 C 52 24, 34 28, 42 38 C 48 45, 39 52, 33 49"
+    stroke="url(#snake)"
+    stroke-width="6"
+    stroke-linecap="round"
+    fill="none"
+  />
+  <circle cx="46" cy="16" r="4.5" fill="#10b981" />
+  <circle cx="44.8" cy="15" r="1.1" fill="#fef3c7" />
+  <circle cx="47.4" cy="15" r="1.1" fill="#fef3c7" />
+</svg>
