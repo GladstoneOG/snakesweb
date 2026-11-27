@@ -123,6 +123,10 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
   roomRef.current = room;
 
   const [animating, setAnimating] = useState(false);
+  const [completedSeq, setCompletedSeq] = useState<number>(() => room.lastMove?.seq ?? 0);
+  const [visualTiles, setVisualTiles] = useState<Record<string, number>>(() =>
+    Object.fromEntries(room.players.map((p) => [p.id, p.tile])),
+  );
   const [rollPending, setRollPending] = useState(false);
   const [activePortal, setActivePortal] = useState<ActivePortal | null>(null);
   const [dizzyIds, setDizzyIds] = useState<string[]>([]);
@@ -148,6 +152,15 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
   );
   const activePlayer = room.players[room.turnIndex] ?? null;
 
+  // Synchronous render-time lock so pawn halo, roster highlight, timer & HUD
+  // never flash to the next player before the current move's animation finishes
+  const unplayedMove = room.lastMove && room.lastMove.seq > completedSeq ? room.lastMove : null;
+  const isMoveInFlight = Boolean(animating || unplayedMove);
+  const activeMovePlayerId = isMoveInFlight ? (room.lastMove?.playerId ?? null) : null;
+  const displayTurnPlayer = activeMovePlayerId
+    ? (room.players.find((p) => p.id === activeMovePlayerId) ?? activePlayer)
+    : activePlayer;
+
   const isLocalTurn = Boolean(
     room.phase === 'playing' &&
       activePlayer &&
@@ -155,7 +168,7 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
       (room.mode === 'couch' || activePlayer.id === room.viewerId),
   );
 
-  const canRoll = isLocalTurn && !animating && !rollPending;
+  const canRoll = isLocalTurn && !isMoveInFlight && !rollPending;
 
   // Helpers to spawn transient on-board FX
   const pushFx = useCallback((item: Omit<FxItem, 'id'>, ttlMs = 1350) => {
@@ -192,8 +205,11 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
 
     if (prevSeqRef.current === null) {
       // Initial mount / rejoin: snap directly without replaying historical move
-      prevSeqRef.current = room.lastMove?.seq ?? 0;
+      const initialSeq = room.lastMove?.seq ?? 0;
+      prevSeqRef.current = initialSeq;
+      setCompletedSeq(initialSeq);
       visualTilesRef.current = nextTiles;
+      setVisualTiles(nextTiles);
       snapPawns(room.players, nextTiles);
       if (room.phase === 'gameover') setShowVictory(true);
       return;
@@ -203,6 +219,7 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
     if (room.lastMove === null) {
       prevSeqRef.current = 0;
       animTokenRef.current++;
+      setCompletedSeq(0);
       setAnimating(false);
       setRollPending(false);
       setActivePortal(null);
@@ -210,20 +227,23 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
       setShowVictory(false);
       setShowConfetti(false);
       visualTilesRef.current = nextTiles;
+      setVisualTiles(nextTiles);
       snapPawns(room.players, nextTiles);
       return;
     }
 
     if (!animating && (room.lastMove?.seq ?? 0) <= prevSeqRef.current) {
       visualTilesRef.current = nextTiles;
+      setVisualTiles(nextTiles);
       snapPawns(room.players, nextTiles);
       if (room.phase === 'gameover') setShowVictory(true);
     }
   }, [room.players, room.lastMove, room.phase, room.matchNumber, animating, snapPawns]);
 
-  // Turn transition chime when it becomes local player's turn
+  // Turn transition chime when it becomes local player's turn (after move choreography settles)
   const prevTurnKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    if (isMoveInFlight) return;
     const key = `${room.matchNumber}:${room.turnNumber}:${room.turnIndex}:${room.lastMove?.seq ?? 0}`;
     if (prevTurnKeyRef.current === null) {
       prevTurnKeyRef.current = key;
@@ -232,12 +252,12 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
     if (prevTurnKeyRef.current !== key) {
       prevTurnKeyRef.current = key;
       setRollPending(false);
-      if (isLocalTurn && !animating) {
+      if (isLocalTurn) {
         sfx.yourTurn();
         haptics.yourTurn();
       }
     }
-  }, [room.matchNumber, room.turnNumber, room.turnIndex, room.lastMove?.seq, isLocalTurn, animating]);
+  }, [room.matchNumber, room.turnNumber, room.turnIndex, room.lastMove?.seq, isLocalTurn, isMoveInFlight]);
 
   // Clear pending roll flag if server reports an error
   useEffect(() => {
@@ -260,10 +280,10 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
     return () => window.clearTimeout(t);
   }, [room.lastEmote, room.viewerId]);
 
-  // Turn countdown ticker + final-5s audio ticks
+  // Turn countdown ticker + final-5s audio ticks (paused while a move is animating)
   const lastTickSecRef = useRef<number | null>(null);
   useEffect(() => {
-    if (!room.turnDeadline || room.rules.turnDuration <= 0 || room.phase !== 'playing') {
+    if (isMoveInFlight || !room.turnDeadline || room.rules.turnDuration <= 0 || room.phase !== 'playing') {
       lastTickSecRef.current = null;
       return;
     }
@@ -272,13 +292,13 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
       setNowMs(now);
       const remMs = room.turnDeadline! - (now + serverOffsetRef.current);
       const secs = Math.ceil(remMs / 1000);
-      if (isLocalTurn && !animating && secs >= 1 && secs <= 5 && secs !== lastTickSecRef.current) {
+      if (isLocalTurn && secs >= 1 && secs <= 5 && secs !== lastTickSecRef.current) {
         lastTickSecRef.current = secs;
         sfx.timerTick(secs);
       }
     }, 120);
     return () => window.clearInterval(id);
-  }, [room.turnDeadline, room.rules.turnDuration, room.phase, isLocalTurn, animating]);
+  }, [room.turnDeadline, room.rules.turnDuration, room.phase, isLocalTurn, isMoveInFlight]);
 
   // Sequenced Move Animator — watches room.lastMove.seq
   useEffect(() => {
@@ -304,6 +324,7 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
         tiles[b.playerId] = b.fromTile;
       }
       visualTilesRef.current = { ...tiles };
+      setVisualTiles({ ...tiles });
       snapPawns(playersSnapshot, tiles);
 
       // (a) 3D Dice roll animation
@@ -369,6 +390,7 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
           // Settle & ripple
           tiles[move.playerId] = nextTile;
           visualTilesRef.current[move.playerId] = nextTile;
+          setVisualTiles({ ...tiles });
           const tok = pawnRefs.current[move.playerId]?.token;
           if (tok) tok.style.transform = 'scale(1, 1)';
           triggerRipple(pawnRefs.current, move.playerId);
@@ -472,6 +494,7 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
 
         tiles[move.playerId] = move.finalTile;
         visualTilesRef.current[move.playerId] = move.finalTile;
+        setVisualTiles({ ...tiles });
         setActivePortal(null);
       }
 
@@ -505,6 +528,7 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
             resetPawnMotion(pawnRefs.current, b.playerId);
             tiles[b.playerId] = b.toTile;
             visualTilesRef.current[b.playerId] = b.toTile;
+            setVisualTiles({ ...tiles });
             pushFx({ kind: 'dust', x: toPt.x, y: toPt.y }, 480);
           }),
         );
@@ -516,6 +540,7 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
       const finalTiles: Record<string, number> = {};
       for (const p of latestPlayers) finalTiles[p.id] = p.tile;
       visualTilesRef.current = finalTiles;
+      setVisualTiles(finalTiles);
       snapPawns(latestPlayers, finalTiles);
 
       // (e) Extra roll flare or Victory celebration
@@ -534,6 +559,7 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
       }
 
       if (!isCancelled()) {
+        setCompletedSeq(move.seq);
         setAnimating(false);
       }
     };
@@ -557,37 +583,42 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
   // Compute active countdown progress (0..1) and remaining seconds
   const turnTimer = useMemo(() => {
     const dur = room.rules.turnDuration;
-    if (!room.turnDeadline || dur <= 0 || room.phase !== 'playing') return null;
+    if (isMoveInFlight || !room.turnDeadline || dur <= 0 || room.phase !== 'playing') return null;
     const remMs = Math.max(0, room.turnDeadline - (nowMs + serverOffsetRef.current));
     const secs = Math.ceil(remMs / 1000);
     const ratio = Math.min(1, Math.max(0, remMs / (dur * 1000)));
     return { secs, ratio, urgent: secs <= 5 };
-  }, [room.turnDeadline, room.rules.turnDuration, room.phase, nowMs]);
+  }, [isMoveInFlight, room.turnDeadline, room.rules.turnDuration, room.phase, nowMs]);
 
   const turnLabel = useMemo(() => {
-    if (room.phase === 'gameover') {
+    if (room.phase === 'gameover' && !isMoveInFlight) {
       const w = room.players.find((p) => p.id === room.winnerId);
       return w ? `${w.name} Wins!` : 'Match Over';
     }
-    if (!activePlayer) return 'Waiting…';
-    if (room.mode === 'couch' && !activePlayer.isBot) {
-      return `${activePlayer.name}'s Turn`;
+    if (!displayTurnPlayer) return 'Waiting…';
+    if (room.mode === 'couch' && !displayTurnPlayer.isBot) {
+      return `${displayTurnPlayer.name}'s Turn`;
     }
-    if (activePlayer.id === room.viewerId) return 'Your Turn!';
-    return `${activePlayer.name}'s Turn`;
-  }, [room.phase, room.players, room.winnerId, room.mode, room.viewerId, activePlayer]);
+    if (displayTurnPlayer.id === room.viewerId) return 'Your Turn!';
+    return `${displayTurnPlayer.name}'s Turn`;
+  }, [room.phase, room.players, room.winnerId, room.mode, room.viewerId, displayTurnPlayer, isMoveInFlight]);
 
   const turnSub = useMemo(() => {
-    if (room.phase !== 'playing' || !activePlayer) return undefined;
-    if (activePlayer.isBot) return 'Bot is thinking…';
-    if (room.mode === 'couch') return 'Pass & Play — tap or press Space';
-    if (activePlayer.id === room.viewerId) {
-      return room.consecutiveSixes > 0
-        ? `Streak: ${room.consecutiveSixes} six${room.consecutiveSixes > 1 ? 'es' : ''}`
-        : `Square ${activePlayer.tile} of 100`;
+    if ((room.phase !== 'playing' && !isMoveInFlight) || !displayTurnPlayer) return undefined;
+    const shownTile = isMoveInFlight
+      ? (visualTiles[displayTurnPlayer.id] ?? displayTurnPlayer.tile)
+      : displayTurnPlayer.tile;
+    if (displayTurnPlayer.isBot) {
+      return isMoveInFlight ? 'Bot is moving…' : 'Bot is thinking…';
     }
-    return `Square ${activePlayer.tile} of 100`;
-  }, [room.phase, room.mode, room.viewerId, room.consecutiveSixes, activePlayer]);
+    if (room.mode === 'couch') return 'Pass & Play — tap or press Space';
+    if (displayTurnPlayer.id === room.viewerId) {
+      return !isMoveInFlight && room.consecutiveSixes > 0
+        ? `Streak: ${room.consecutiveSixes} six${room.consecutiveSixes > 1 ? 'es' : ''}`
+        : `Square ${shownTile} of 100`;
+    }
+    return `Square ${shownTile} of 100`;
+  }, [room.phase, room.mode, room.viewerId, room.consecutiveSixes, displayTurnPlayer, isMoveInFlight, visualTiles]);
 
   const recentActivity = useMemo(() => [...room.activity].slice(-14).reverse(), [room.activity]);
   const latestActivity = recentActivity[0] ?? null;
@@ -691,12 +722,14 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
         {/* Left Roster (Desktop) / Compact Horizontal Strip (Mobile Portrait) */}
         <aside className="roster-col" aria-label="Players">
           <div className="roster-list">
-            {room.players.map((p, idx) => {
-              const isTurn = idx === room.turnIndex && room.phase === 'playing';
+            {room.players.map((p) => {
+              const isTurn =
+                displayTurnPlayer?.id === p.id && (room.phase === 'playing' || isMoveInFlight);
               const isViewer = p.id === room.viewerId;
               const pal = paletteOf(p.color);
               const emote = floatingEmotes.find((e) => e.playerId === p.id);
-              const progressPct = Math.min(100, Math.max(0, p.tile));
+              const shownTile = isMoveInFlight ? (visualTiles[p.id] ?? p.tile) : p.tile;
+              const progressPct = Math.min(100, Math.max(0, shownTile));
               const ringCircumference = 2 * Math.PI * 19;
               const ringOffset =
                 isTurn && turnTimer ? ringCircumference * (1 - turnTimer.ratio) : 0;
@@ -760,7 +793,7 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
 
                     <div className="roster-sub-row">
                       <span className="roster-tile">
-                        {p.tile === 0 ? 'Start' : `Tile ${p.tile}`}
+                        {shownTile === 0 ? 'Start' : `Tile ${shownTile}`}
                       </span>
                       {isTurn && turnTimer ? (
                         <span className={`roster-timer-num${turnTimer.urgent ? ' is-urgent' : ''}`}>
@@ -786,7 +819,10 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
               ref={boardRef}
               portals={room.portals}
               players={room.players}
-              activeId={room.phase === 'playing' ? (activePlayer?.id ?? null) : room.winnerId}
+              activeId={
+                activeMovePlayerId ??
+                (room.phase === 'playing' ? (activePlayer?.id ?? null) : room.winnerId)
+              }
               activePortal={activePortal}
               pawnRefs={pawnRefs}
               dizzyIds={dizzyIds}
@@ -807,12 +843,14 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
           <DiceTray
             ref={diceRef}
             canRoll={canRoll}
-            rolling={animating || rollPending}
+            rolling={isMoveInFlight || rollPending}
             lastFace={room.lastMove?.dice ?? 6}
             turnLabel={turnLabel}
             turnSub={turnSub}
-            activeColor={activePlayer?.color ?? 'amber'}
-            bonusActive={Boolean(room.lastMove?.grantedExtraRoll && room.consecutiveSixes > 0)}
+            activeColor={displayTurnPlayer?.color ?? 'amber'}
+            bonusActive={Boolean(
+              !isMoveInFlight && room.lastMove?.grantedExtraRoll && room.consecutiveSixes > 0,
+            )}
             onRoll={handleRoll}
           />
 

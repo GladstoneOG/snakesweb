@@ -1,6 +1,7 @@
 import '../styles/screens.css';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import * as THREE from 'three';
 import {
   Bot,
   CircleHelp,
@@ -15,6 +16,11 @@ import {
 } from 'lucide-react';
 import { fetchOpenRoomsResult } from '@net/session';
 import type { LobbyListing } from '@net/session';
+import {
+  createDieFaceTexture,
+  createRoundedDieGeometry,
+  DIE_FACE_MATERIAL_ORDER,
+} from '@utils/dicePhysics';
 import { sfx } from '@utils/sfx';
 import { music } from '@utils/music';
 import { HowToPlayModal } from './HowToPlayModal';
@@ -80,36 +86,118 @@ function phaseLabel(phase: string | null): string {
 
 /* ---------- Hero art ---------- */
 
-const PIPS: Record<number, number[]> = {
-  1: [4],
-  2: [0, 8],
-  3: [0, 4, 8],
-  4: [0, 2, 6, 8],
-  5: [0, 2, 4, 6, 8],
-  6: [0, 2, 3, 5, 6, 8],
-};
+const HERO_DIE_SIZE = 110;
 
-function DieFace({ face }: { face: number }) {
-  const on = PIPS[face];
+function HeroDieSvgFallback() {
   return (
-    <div className={`hero-die-face hero-die-face-${face}`}>
-      {Array.from({ length: 9 }, (_, i) => (
-        <span key={i} className={on.includes(i) ? 'pip' : 'pip pip-off'} />
-      ))}
-    </div>
+    <svg className="hero-die-fallback" viewBox="0 0 80 80" width={76} height={76} aria-hidden="true">
+      <defs>
+        <linearGradient id="hd-top" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#fffefb" />
+          <stop offset="100%" stopColor="#efe0be" />
+        </linearGradient>
+        <linearGradient id="hd-left" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#f3e3bf" />
+          <stop offset="100%" stopColor="#d2b682" />
+        </linearGradient>
+        <linearGradient id="hd-right" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#e5cf9e" />
+          <stop offset="100%" stopColor="#b9965c" />
+        </linearGradient>
+      </defs>
+      <polygon points="40,10 68,24 40,38 12,24" fill="url(#hd-top)" stroke="#b08a1e" strokeWidth="1.5" strokeLinejoin="round" />
+      <polygon points="12,24 40,38 40,68 12,54" fill="url(#hd-left)" stroke="#9a7518" strokeWidth="1.5" strokeLinejoin="round" />
+      <polygon points="68,24 40,38 40,68 68,54" fill="url(#hd-right)" stroke="#8c6814" strokeWidth="1.5" strokeLinejoin="round" />
+      <ellipse cx="40" cy="24" rx="5.5" ry="3.4" fill="#dc2626" />
+      <circle cx="21" cy="36" r="3" fill="#231209" />
+      <circle cx="31" cy="54" r="3" fill="#231209" />
+      <circle cx="50" cy="40" r="3" fill="#231209" />
+      <circle cx="59" cy="35" r="3" fill="#231209" />
+      <circle cx="54.5" cy="47" r="3" fill="#231209" />
+      <circle cx="50" cy="58" r="3" fill="#231209" />
+      <circle cx="59" cy="53" r="3" fill="#231209" />
+    </svg>
   );
 }
 
 function HeroDie() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [webglFailed, setWebglFailed] = useState(false);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    let renderer: THREE.WebGLRenderer | null = null;
+    const disposables: Array<{ dispose: () => void }> = [];
+
+    try {
+      renderer = new THREE.WebGLRenderer({
+        canvas,
+        alpha: true,
+        antialias: true,
+        powerPreference: 'default',
+      });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+      renderer.setSize(HERO_DIE_SIZE, HERO_DIE_SIZE, false);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 30);
+      camera.position.set(0, 1.35, 3.65);
+      camera.lookAt(0, 0, 0);
+
+      const hemiLight = new THREE.HemisphereLight(0xfffaf0, 0x3b1d2a, 1.25);
+      scene.add(hemiLight);
+
+      const keyLight = new THREE.DirectionalLight(0xfff7ed, 1.9);
+      keyLight.position.set(3.2, 5.5, 4.2);
+      scene.add(keyLight);
+
+      const rimLight = new THREE.DirectionalLight(0xfde68a, 0.75);
+      rimLight.position.set(-3.5, 3, -3);
+      scene.add(rimLight);
+
+      const materials = DIE_FACE_MATERIAL_ORDER.map((val) => {
+        const tex = createDieFaceTexture(val, '#d97706');
+        const mat = new THREE.MeshStandardMaterial({
+          map: tex,
+          roughness: 0.22,
+          metalness: 0.06,
+        });
+        disposables.push(tex, mat);
+        return mat;
+      });
+
+      const dieGeo = createRoundedDieGeometry(1.32, 0.15, 8);
+      disposables.push(dieGeo);
+      const dieMesh = new THREE.Mesh(dieGeo, materials);
+      // Static 3-face isometric pose rendered once; CSS .hero-die-canvas float handles gentle idle motion
+      dieMesh.rotation.set(0.52, 0.68, 0.12);
+      scene.add(dieMesh);
+
+      renderer.render(scene, camera);
+    } catch {
+      setWebglFailed(true);
+    }
+
+    return () => {
+      for (const item of disposables) item.dispose();
+      renderer?.dispose();
+    };
+  }, []);
+
   return (
     <div className="hero-die-stage" aria-hidden="true">
-      <div className="hero-die-float">
-        <div className="hero-die">
-          {[1, 2, 3, 4, 5, 6].map((f) => (
-            <DieFace key={f} face={f} />
-          ))}
-        </div>
-      </div>
+      {webglFailed ? (
+        <HeroDieSvgFallback />
+      ) : (
+        <canvas
+          ref={canvasRef}
+          width={HERO_DIE_SIZE}
+          height={HERO_DIE_SIZE}
+          className="hero-die-canvas"
+        />
+      )}
       <div className="hero-die-shadow" />
     </div>
   );

@@ -80,14 +80,14 @@ export const DEFAULT_RULES: GameRules = {
  * - Tile 1 is bottom-left (x=5, y=95), going right to Tile 10 (x=95, y=95).
  * - Tile 11 is (x=95, y=85), going left to Tile 20 (x=5, y=85).
  * - Tile 100 is top-left (x=5, y=5).
- * - Tile 0 is the Start Pad tucked at the bottom-left edge.
+ * - Tile 0 is centered on Tile 1 (x=5, y=95) so starting pawns sit cleanly inside Tile 1.
  */
 export function getTileCoords(tile: number): TileCoord {
   if (tile <= 0) {
     return {
       tile: 0,
-      x: 3.5,
-      y: 98.5,
+      x: 5,
+      y: 95,
       row: 0,
       col: 0,
       direction: 'right',

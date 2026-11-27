@@ -1,10 +1,10 @@
+import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
+
 export type Quat = [number, number, number, number]; // [x, y, z, w]
-export type Vec3 = [number, number, number];
 
 export interface DiceFrame {
-  x: number;
-  y: number;
-  z: number;
+  pos: [number, number, number];
   quat: Quat;
 }
 
@@ -15,23 +15,87 @@ export interface DiceSimulation {
   durationMs: number;
 }
 
+export const WORLD_UP = new THREE.Vector3(0, 1, 0);
+export const DIE_HALF_EXTENT = 0.62; // die size = 1.24
+
 /**
- * Local outward normals for each face (1..6) matching the CSS 3D cube convention:
- * - Face 1: rotateY(0deg)   translateZ(half) -> ( 0,  0,  1)
- * - Face 6: rotateY(180deg) translateZ(half) -> ( 0,  0, -1)
- * - Face 3: rotateY(90deg)  translateZ(half) -> ( 1,  0,  0)
- * - Face 4: rotateY(-90deg) translateZ(half) -> (-1,  0,  0)
- * - Face 2: rotateX(90deg)  translateZ(half) -> ( 0, -1,  0)
- * - Face 5: rotateX(-90deg) translateZ(half) -> ( 0,  1,  0)
+ * Three.js BoxGeometry material face order:
+ * 0:+X -> 3, 1:-X -> 4, 2:+Y -> 1, 3:-Y -> 6, 4:+Z -> 2, 5:-Z -> 5
  */
-export const FACE_NORMALS: Record<number, Vec3> = {
-  1: [0, 0, 1],
-  2: [0, -1, 0],
-  3: [1, 0, 0],
-  4: [-1, 0, 0],
-  5: [0, 1, 0],
-  6: [0, 0, -1],
+export const DIE_FACE_MATERIAL_ORDER = [3, 4, 1, 6, 2, 5] as const;
+
+export const LOCAL_FACE_NORMALS: Readonly<Record<number, THREE.Vector3>> = {
+  1: new THREE.Vector3(0, 1, 0),
+  2: new THREE.Vector3(0, 0, 1),
+  3: new THREE.Vector3(1, 0, 0),
+  4: new THREE.Vector3(-1, 0, 0),
+  5: new THREE.Vector3(0, 0, -1),
+  6: new THREE.Vector3(0, -1, 0),
 };
+
+const PIP_COORDS: Readonly<Record<number, ReadonlyArray<readonly [number, number]>>> = {
+  1: [[0.5, 0.5]],
+  2: [
+    [0.27, 0.27],
+    [0.73, 0.73],
+  ],
+  3: [
+    [0.27, 0.27],
+    [0.5, 0.5],
+    [0.73, 0.73],
+  ],
+  4: [
+    [0.27, 0.27],
+    [0.73, 0.27],
+    [0.27, 0.73],
+    [0.73, 0.73],
+  ],
+  5: [
+    [0.27, 0.27],
+    [0.73, 0.27],
+    [0.5, 0.5],
+    [0.27, 0.73],
+    [0.73, 0.73],
+  ],
+  6: [
+    [0.27, 0.25],
+    [0.27, 0.5],
+    [0.27, 0.75],
+    [0.73, 0.25],
+    [0.73, 0.5],
+    [0.73, 0.75],
+  ],
+};
+
+/**
+ * Precompute all 24 proper rotation quaternions (det = +1) of the cube symmetry group O.
+ */
+function buildCubeGroupRotations(): THREE.Quaternion[] {
+  const axes = [
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(-1, 0, 0),
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, -1, 0),
+    new THREE.Vector3(0, 0, 1),
+    new THREE.Vector3(0, 0, -1),
+  ];
+
+  const rotations: THREE.Quaternion[] = [];
+  const zAxis = new THREE.Vector3();
+  const mat = new THREE.Matrix4();
+
+  for (const xAxis of axes) {
+    for (const yAxis of axes) {
+      if (Math.abs(xAxis.dot(yAxis)) > 0.01) continue;
+      zAxis.crossVectors(xAxis, yAxis);
+      mat.makeBasis(xAxis, yAxis, zAxis);
+      rotations.push(new THREE.Quaternion().setFromRotationMatrix(mat).normalize());
+    }
+  }
+  return rotations;
+}
+
+export const CUBE_ROTATIONS_24: readonly THREE.Quaternion[] = buildCubeGroupRotations();
 
 function hashSeed(seed: string): number {
   let h = 2166136261 >>> 0;
@@ -43,419 +107,435 @@ function hashSeed(seed: string): number {
 }
 
 function createPrng(seed: string): () => number {
-  let a = hashSeed(seed || 'dice') || 1;
+  let state = hashSeed(seed || 'dice') || 0x9e3779b9;
   return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
 
-export function quatNormalize(q: Quat): Quat {
-  const len = Math.hypot(q[0], q[1], q[2], q[3]);
-  if (len < 1e-12) return [0, 0, 0, 1];
-  const inv = 1 / len;
-  return [q[0] * inv, q[1] * inv, q[2] * inv, q[3] * inv];
+function randRange(rng: () => number, min: number, max: number): number {
+  return min + (max - min) * rng();
 }
 
-export function quatMultiply(a: Quat, b: Quat): Quat {
-  const [ax, ay, az, aw] = a;
-  const [bx, by, bz, bw] = b;
-  return [
-    aw * bx + ax * bw + ay * bz - az * by,
-    aw * by - ax * bz + ay * bw + az * bx,
-    aw * bz + ax * by - ay * bx + az * bw,
-    aw * bw - ax * bx - ay * by - az * bz,
-  ];
-}
-
-function quatFromAxisAngle(axis: Vec3, angleRad: number): Quat {
-  const len = Math.hypot(axis[0], axis[1], axis[2]);
-  if (len < 1e-12) return [0, 0, 0, 1];
-  const half = angleRad * 0.5;
-  const s = Math.sin(half) / len;
-  return [axis[0] * s, axis[1] * s, axis[2] * s, Math.cos(half)];
-}
-
-function quatSlerp(a: Quat, b: Quat, t: number): Quat {
-  let [bx, by, bz, bw] = b;
-  let dot = a[0] * bx + a[1] * by + a[2] * bz + a[3] * bw;
-  if (dot < 0) {
-    dot = -dot;
-    bx = -bx;
-    by = -by;
-    bz = -bz;
-    bw = -bw;
-  }
-  if (dot > 0.9995) {
-    return quatNormalize([
-      a[0] + t * (bx - a[0]),
-      a[1] + t * (by - a[1]),
-      a[2] + t * (bz - a[2]),
-      a[3] + t * (bw - a[3]),
-    ]);
-  }
-  const theta0 = Math.acos(Math.min(1, Math.max(-1, dot)));
-  const theta = theta0 * t;
-  const sinTheta = Math.sin(theta);
-  const sinTheta0 = Math.sin(theta0);
-  const s0 = Math.cos(theta) - (dot * sinTheta) / sinTheta0;
-  const s1 = sinTheta / sinTheta0;
-  return quatNormalize([
-    s0 * a[0] + s1 * bx,
-    s0 * a[1] + s1 * by,
-    s0 * a[2] + s1 * bz,
-    s0 * a[3] + s1 * bw,
-  ]);
-}
-
-export function rotateVecByQuat(v: Vec3, q: Quat): Vec3 {
-  const [qx, qy, qz, qw] = q;
-  const [vx, vy, vz] = v;
-  // t = 2 * cross(q.xyz, v)
-  const tx = 2 * (qy * vz - qz * vy);
-  const ty = 2 * (qz * vx - qx * vz);
-  const tz = 2 * (qx * vy - qy * vx);
-  // v' = v + qw * t + cross(q.xyz, t)
-  return [
-    vx + qw * tx + (qy * tz - qz * ty),
-    vy + qw * ty + (qz * tx - qx * tz),
-    vz + qw * tz + (qx * ty - qy * tx),
-  ];
-}
-
-function dot3(a: Vec3, b: Vec3): number {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-function cross3(a: Vec3, b: Vec3): Vec3 {
-  return [
-    a[1] * b[2] - a[2] * b[1],
-    a[2] * b[0] - a[0] * b[2],
-    a[0] * b[1] - a[1] * b[0],
-  ];
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
 }
 
 /**
- * Generates the exact 24-element proper cube rotation group (octahedral group O).
- * Every element maps the cube onto itself while preserving orientation (det = +1).
+ * Finds the nearest flat resting orientation (keeping natural yaw around world Y)
+ * where one of the 6 local cube axes points straight up (0, 1, 0).
  */
-function buildCubeRotationGroup(): Quat[] {
-  const halfPi = Math.PI / 2;
-  const faceToTop: Quat[] = [
-    [0, 0, 0, 1], // Face 1 -> +Z
-    quatFromAxisAngle([1, 0, 0], -halfPi), // Face 2 (0,-1,0) -> +Z
-    quatFromAxisAngle([0, 1, 0], -halfPi), // Face 3 (1,0,0) -> +Z
-    quatFromAxisAngle([0, 1, 0], halfPi), // Face 4 (-1,0,0) -> +Z
-    quatFromAxisAngle([1, 0, 0], halfPi), // Face 5 (0,1,0) -> +Z
-    quatFromAxisAngle([0, 1, 0], Math.PI), // Face 6 (0,0,-1) -> +Z
+function computeNearestFlatQuaternion(q: THREE.Quaternion): THREE.Quaternion {
+  const localAxes = [
+    new THREE.Vector3(1, 0, 0),
+    new THREE.Vector3(-1, 0, 0),
+    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0, -1, 0),
+    new THREE.Vector3(0, 0, 1),
+    new THREE.Vector3(0, 0, -1),
   ];
 
-  const group: Quat[] = [];
-  for (const base of faceToTop) {
-    for (let k = 0; k < 4; k++) {
-      const zSpin = quatFromAxisAngle([0, 0, 1], k * halfPi);
-      group.push(quatNormalize(quatMultiply(zSpin, base)));
-    }
-  }
-  return group;
-}
-
-export const CUBE_GROUP_QUATS: readonly Quat[] = buildCubeRotationGroup();
-
-/**
- * Computes the nearest flat orientation (some local cube axis aligned strictly with +Z,
- * preserving the current yaw around world Z) so the resting die lies flush on the tray.
- */
-function snapFlatToFloor(q: Quat): Quat {
-  // Find which of the 6 local face normals currently points closest to +Z
-  let bestNormal: Vec3 = [0, 0, 1];
+  let bestWorldNormal = new THREE.Vector3(0, 1, 0);
   let bestDot = -Infinity;
-  for (let face = 1; face <= 6; face++) {
-    const worldN = rotateVecByQuat(FACE_NORMALS[face], q);
-    if (worldN[2] > bestDot) {
-      bestDot = worldN[2];
-      bestNormal = worldN;
+
+  for (const axis of localAxes) {
+    const worldNormal = axis.clone().applyQuaternion(q);
+    if (worldNormal.y > bestDot) {
+      bestDot = worldNormal.y;
+      bestWorldNormal = worldNormal;
     }
   }
 
-  // Shortest-arc rotation bringing bestNormal -> (0, 0, 1)
-  const up: Vec3 = [0, 0, 1];
-  const d = Math.max(-1, Math.min(1, dot3(bestNormal, up)));
-  let alignQ: Quat = [0, 0, 0, 1];
-  if (d < 0.999999) {
-    const axis = cross3(bestNormal, up);
-    const axisLen = Math.hypot(axis[0], axis[1], axis[2]);
-    if (axisLen > 1e-6) {
-      alignQ = quatFromAxisAngle(axis, Math.acos(d));
-    } else {
-      alignQ = quatFromAxisAngle([1, 0, 0], Math.PI);
-    }
+  bestWorldNormal.normalize();
+  const align = new THREE.Quaternion();
+  if (bestWorldNormal.dot(WORLD_UP) < -0.9999) {
+    align.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+  } else {
+    align.setFromUnitVectors(bestWorldNormal, WORLD_UP);
   }
 
-  return quatNormalize(quatMultiply(alignQ, q));
+  return align.multiply(q).normalize();
 }
 
 /**
- * Picks a symmetry element `qRemap` in the 24-element cube rotation group such that
- * `qSimFinal * qRemap` maps `FACE_NORMALS[targetFace]` strictly to `(0, 0, +1)`.
+ * Finds a proper cube rotation R among the 24 group elements so that
+ * (qEnd * R) * LOCAL_FACE_NORMALS[targetFace] === (0, 1, 0).
  */
-function findRemapQuat(qSimFinal: Quat, targetFace: number, rand: () => number): Quat {
-  const targetNormal = FACE_NORMALS[targetFace] ?? FACE_NORMALS[1];
-  const candidates: Quat[] = [];
-  let bestScore = -Infinity;
-  let bestQuat: Quat = CUBE_GROUP_QUATS[0];
+function findRemapRotation(qEnd: THREE.Quaternion, targetFace: number): THREE.Quaternion {
+  const localNormal = LOCAL_FACE_NORMALS[targetFace] ?? LOCAL_FACE_NORMALS[1];
+  const candidate = new THREE.Quaternion();
+  const transformed = new THREE.Vector3();
 
-  for (const g of CUBE_GROUP_QUATS) {
-    const combined = quatNormalize(quatMultiply(qSimFinal, g));
-    const worldN = rotateVecByQuat(targetNormal, combined);
-    const score = worldN[2];
-    if (score > bestScore) {
-      bestScore = score;
-      bestQuat = g;
-    }
-    if (score > 0.999) {
-      candidates.push(g);
+  let bestRot = CUBE_ROTATIONS_24[0];
+  let bestDot = -Infinity;
+
+  for (const r of CUBE_ROTATIONS_24) {
+    candidate.copy(qEnd).multiply(r);
+    transformed.copy(localNormal).applyQuaternion(candidate);
+    if (transformed.y > bestDot) {
+      bestDot = transformed.y;
+      bestRot = r;
     }
   }
-
-  if (candidates.length > 0) {
-    const pick = Math.floor(rand() * candidates.length);
-    return candidates[pick];
-  }
-  return bestQuat;
+  return bestRot.clone();
 }
 
-const CUBE_CORNERS: readonly Vec3[] = [
-  [-1, -1, -1],
-  [-1, -1, 1],
-  [-1, 1, -1],
-  [-1, 1, 1],
-  [1, -1, -1],
-  [1, -1, 1],
-  [1, 1, -1],
-  [1, 1, 1],
-];
-
 /**
- * Pure TypeScript 3D rigid-body single-die bounce simulation at 60 FPS.
- * Coordinates (x, y, z) are in subtle CSS pixels relative to the tray center
- * (x, y within ~[-38, 38], z >= 0 height above tray surface).
- *
- * Guarantees mathematically via 24-element cube group remapping that the final
- * resting orientation puts `targetFace` strictly facing +Z (toward the viewer)
- * while lying completely flat on the tray (z = 0).
+ * Deterministic 3D rigid-body simulation (cannon-es) of a single die tossed into
+ * a velvet tray, with exact 24-element cube symmetry group remapping so
+ * LOCAL_FACE_NORMALS[targetFace] points strictly straight up (0, 1, 0) on settle.
  */
 export function simulateSingleDie(seed: string, targetFace: number): DiceSimulation {
   const safeFace = Math.min(6, Math.max(1, Math.round(targetFace)));
-  const rand = createPrng(`${seed}:face=${safeFace}`);
+  const rng = createPrng(seed || 'dice');
 
-  const fps = 60;
-  const dt = 1 / fps;
-  const totalFrames = 62; // ~1033ms crisp, snappy tabletop roll
-  const settleBlendStart = 50;
+  const world = new CANNON.World();
+  world.gravity.set(0, -44, 0);
+  world.broadphase = new CANNON.SAPBroadphase(world);
+  world.allowSleep = false;
 
-  // Die half-size in virtual tray pixels for realistic floor contact clearance
-  const halfSize = 18;
-  const trayBound = 36;
-  const gravity = -1950;
+  const groundMat = new CANNON.Material('ground');
+  const wallMat = new CANNON.Material('wall');
+  const diceMat = new CANNON.Material('dice');
 
-  // Initial throw state: tossed from slightly off-center with energetic spin
-  let x = (rand() - 0.5) * 34;
-  let y = (rand() - 0.5) * 28;
-  let z = 62 + rand() * 28;
+  world.addContactMaterial(
+    new CANNON.ContactMaterial(diceMat, groundMat, {
+      restitution: 0.44,
+      friction: 0.36,
+    }),
+  );
+  world.addContactMaterial(
+    new CANNON.ContactMaterial(diceMat, wallMat, {
+      restitution: 0.56,
+      friction: 0.14,
+    }),
+  );
 
-  let vx = (rand() - 0.5) * 145 - x * 1.4;
-  let vy = (rand() - 0.5) * 145 - y * 1.4;
-  let vz = 95 + rand() * 85;
+  // Tray floor plane at y = 0
+  const groundBody = new CANNON.Body({ mass: 0, material: groundMat });
+  groundBody.addShape(new CANNON.Plane());
+  groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+  world.addBody(groundBody);
 
-  let wx = (rand() > 0.5 ? 1 : -1) * (10 + rand() * 9);
-  let wy = (rand() > 0.5 ? 1 : -1) * (10 + rand() * 9);
-  let wz = (rand() - 0.5) * 12;
-
-  let q: Quat = quatNormalize([
-    rand() - 0.5,
-    rand() - 0.5,
-    rand() - 0.5,
-    rand() - 0.5,
-  ]);
-
-  const rawFrames: DiceFrame[] = [];
-  const bounceFrames: number[] = [];
-  let lastBounceFrame = -10;
-
-  for (let i = 0; i < totalFrames; i++) {
-    // Integrate linear velocity and position
-    vz += gravity * dt;
-    x += vx * dt;
-    y += vy * dt;
-    z += vz * dt;
-
-    // Integrate angular velocity into quaternion: dq = 0.5 * [w, 0] * q
-    const spinSpeed = Math.hypot(wx, wy, wz);
-    if (spinSpeed > 1e-4) {
-      const dq = quatFromAxisAngle([wx, wy, wz], spinSpeed * dt);
-      q = quatNormalize(quatMultiply(dq, q));
-    }
-
-    // Soft tray wall collisions
-    if (x > trayBound) {
-      x = trayBound;
-      vx = -Math.abs(vx) * 0.58;
-      wy += 2.2;
-    } else if (x < -trayBound) {
-      x = -trayBound;
-      vx = Math.abs(vx) * 0.58;
-      wy -= 2.2;
-    }
-    if (y > trayBound) {
-      y = trayBound;
-      vy = -Math.abs(vy) * 0.58;
-      wx -= 2.2;
-    } else if (y < -trayBound) {
-      y = -trayBound;
-      vy = Math.abs(vy) * 0.58;
-      wx += 2.2;
-    }
-
-    // Find lowest corner of the rotated cube to detect authentic floor contact
-    let minCornerZ = Infinity;
-    let lowestCorner: Vec3 = [0, 0, -halfSize];
-    for (const c of CUBE_CORNERS) {
-      const wc = rotateVecByQuat([c[0] * halfSize, c[1] * halfSize, c[2] * halfSize], q);
-      if (wc[2] < minCornerZ) {
-        minCornerZ = wc[2];
-        lowestCorner = wc;
-      }
-    }
-
-    const clearance = -minCornerZ - halfSize; // extra lift when tilted on edge/corner
-    const floorZ = Math.max(0, clearance);
-
-    if (z <= floorZ) {
-      const impactSpeed = -vz;
-      z = floorZ;
-
-      if (impactSpeed > 65) {
-        vz = impactSpeed * 0.44;
-        vx *= 0.72;
-        vy *= 0.72;
-
-        // Corner torque impulse on impact
-        wx = wx * 0.68 + (lowestCorner[1] / halfSize) * (impactSpeed * 0.015);
-        wy = wy * 0.68 - (lowestCorner[0] / halfSize) * (impactSpeed * 0.015);
-        wz *= 0.72;
-
-        if (i - lastBounceFrame >= 4) {
-          bounceFrames.push(i);
-          lastBounceFrame = i;
-        }
-      } else {
-        vz = 0;
-        vx *= 0.82;
-        vy *= 0.82;
-        wx *= 0.76;
-        wy *= 0.76;
-        wz *= 0.78;
-      }
-    } else {
-      // Gentle air drag
-      vx *= 0.992;
-      vy *= 0.992;
-      wx *= 0.988;
-      wy *= 0.988;
-      wz *= 0.988;
-    }
-
-    // Gentle recentering pull toward tray middle so final die stays well framed
-    x *= 0.985;
-    y *= 0.985;
-
-    rawFrames.push({
-      x: Math.round(x * 100) / 100,
-      y: Math.round(y * 100) / 100,
-      z: Math.round(Math.max(0, z) * 100) / 100,
-      quat: q,
-    });
+  // 4 invisible tray containment walls at x = ±1.45, z = ±1.05
+  const wallSpecs: Array<{ pos: [number, number, number]; euler: [number, number, number] }> = [
+    { pos: [1.45, 0, 0], euler: [0, -Math.PI / 2, 0] },
+    { pos: [-1.45, 0, 0], euler: [0, Math.PI / 2, 0] },
+    { pos: [0, 0, 1.05], euler: [0, Math.PI, 0] },
+    { pos: [0, 0, -1.05], euler: [0, 0, 0] },
+  ];
+  for (const spec of wallSpecs) {
+    const wall = new CANNON.Body({ mass: 0, material: wallMat });
+    wall.addShape(new CANNON.Plane());
+    wall.position.set(spec.pos[0], spec.pos[1], spec.pos[2]);
+    wall.quaternion.setFromEuler(spec.euler[0], spec.euler[1], spec.euler[2]);
+    world.addBody(wall);
   }
 
-  // Ensure at least one audible bounce if initial toss was unusually soft
+  const randSpin = () => (rng() < 0.5 ? -1 : 1) * randRange(rng, 11, 19);
+  const startX = randRange(rng, -0.72, 0.72);
+  const startY = randRange(rng, 2.35, 3.05);
+  const startZ = randRange(rng, -0.35, 0.35);
+
+  const die = new CANNON.Body({
+    mass: 1,
+    material: diceMat,
+    linearDamping: 0.16,
+    angularDamping: 0.16,
+  });
+  die.addShape(new CANNON.Box(new CANNON.Vec3(DIE_HALF_EXTENT, DIE_HALF_EXTENT, DIE_HALF_EXTENT)));
+  die.position.set(startX, startY, startZ);
+  die.velocity.set(
+    randRange(rng, -3.2, 3.2) - startX * 2.1,
+    randRange(rng, 0.9, 2.5),
+    randRange(rng, -2.4, 2.4) - startZ * 2.1,
+  );
+  die.angularVelocity.set(randSpin(), randSpin(), randSpin());
+  die.quaternion.setFromEuler(
+    randRange(rng, 0, Math.PI * 2),
+    randRange(rng, 0, Math.PI * 2),
+    randRange(rng, 0, Math.PI * 2),
+  );
+  world.addBody(die);
+
+  const totalFrames = 72;
+  const settleStart = 52;
+  const settleFrame = 66;
+  const bounceFrames: number[] = [];
+  let lastBounceFrame = -10;
+  let currentFrame = 0;
+
+  die.addEventListener('collide', (ev: { body: CANNON.Body; contact: CANNON.ContactEquation }) => {
+    if (ev.body !== groundBody) return;
+    const impactSpeed = Math.abs(ev.contact.getImpactVelocityAlongNormal());
+    if (impactSpeed > 1.5 && currentFrame - lastBounceFrame >= 5 && currentFrame < settleStart) {
+      bounceFrames.push(currentFrame);
+      lastBounceFrame = currentFrame;
+    }
+  });
+
+  const rawPos: THREE.Vector3[] = [];
+  const rawQuat: THREE.Quaternion[] = [];
+
+  for (let f = 0; f < totalFrames; f++) {
+    currentFrame = f;
+    if (f >= 48) {
+      const t = (f - 47) / (totalFrames - 47);
+      const damp = 0.16 + t * 0.74;
+      die.linearDamping = damp;
+      die.angularDamping = damp;
+    }
+
+    const prevVy = die.velocity.y;
+    world.step(1 / 60);
+
+    // Secondary bounce check in case contact impact velocity threshold was missed
+    if (
+      f < settleStart &&
+      f - lastBounceFrame >= 5 &&
+      prevVy < -2.2 &&
+      die.velocity.y > -0.2 &&
+      die.position.y <= DIE_HALF_EXTENT + 0.35
+    ) {
+      bounceFrames.push(f);
+      lastBounceFrame = f;
+    }
+
+    rawPos.push(
+      new THREE.Vector3(die.position.x, Math.max(DIE_HALF_EXTENT, die.position.y), die.position.z),
+    );
+    rawQuat.push(
+      new THREE.Quaternion(
+        die.quaternion.x,
+        die.quaternion.y,
+        die.quaternion.z,
+        die.quaternion.w,
+      ).normalize(),
+    );
+  }
+
   if (bounceFrames.length === 0) {
     bounceFrames.push(18);
   }
 
-  // Snap the final resting frames smoothly to a completely flat floor orientation
-  const settleBaseQuat = rawFrames[settleBlendStart].quat;
-  const flatEndQuat = snapFlatToFloor(rawFrames[totalFrames - 1].quat);
-  const finalX = rawFrames[totalFrames - 1].x * 0.65;
-  const finalY = rawFrames[totalFrames - 1].y * 0.65;
-  const startBlendX = rawFrames[settleBlendStart].x;
-  const startBlendY = rawFrames[settleBlendStart].y;
-  const startBlendZ = rawFrames[settleBlendStart].z;
+  // Smoothstep frames 52..66 onto exact flat resting orientation at y = DIE_HALF_EXTENT
+  const qFlat = computeNearestFlatQuaternion(rawQuat[settleStart]);
+  const restX = THREE.MathUtils.clamp(rawPos[settleFrame].x, -0.45, 0.45);
+  const restZ = THREE.MathUtils.clamp(rawPos[settleFrame].z, -0.35, 0.35);
 
-  for (let i = settleBlendStart; i < totalFrames; i++) {
-    const rawT = (i - settleBlendStart) / (totalFrames - 1 - settleBlendStart);
-    // Smoothstep easing for tactile settling onto the velvet felt
-    const ease = rawT * rawT * (3 - 2 * rawT);
-    rawFrames[i] = {
-      x: Math.round((startBlendX + (finalX - startBlendX) * ease) * 100) / 100,
-      y: Math.round((startBlendY + (finalY - startBlendY) * ease) * 100) / 100,
-      z: Math.round(startBlendZ * (1 - ease) * 100) / 100,
-      quat: quatSlerp(settleBaseQuat, flatEndQuat, ease),
-    };
+  for (let f = settleStart; f < totalFrames; f++) {
+    if (f >= settleFrame) {
+      rawPos[f].set(restX, DIE_HALF_EXTENT, restZ);
+      rawQuat[f].copy(qFlat);
+    } else {
+      const alpha = smoothstep(settleStart, settleFrame, f);
+      rawPos[f].x = THREE.MathUtils.lerp(rawPos[f].x, restX, alpha);
+      rawPos[f].z = THREE.MathUtils.lerp(rawPos[f].z, restZ, alpha);
+      rawPos[f].y = THREE.MathUtils.lerp(rawPos[f].y, DIE_HALF_EXTENT, alpha);
+      rawQuat[f].slerp(qFlat, alpha).normalize();
+    }
   }
 
-  // Exact 24-element cube rotation group remapping so targetFace ends strictly facing +Z
-  const qRemap = findRemapQuat(flatEndQuat, safeFace, rand);
-  const remappedFrames: DiceFrame[] = rawFrames.map((frame) => ({
-    x: frame.x,
-    y: frame.y,
-    z: frame.z,
-    quat: quatNormalize(quatMultiply(frame.quat, qRemap)),
-  }));
-
-  // Guarantee exact zero height on the final settled frame
-  remappedFrames[remappedFrames.length - 1].z = 0;
+  // Remap body faces via the 24-element cube symmetry group so targetFace points straight up (+Y)
+  const remap = findRemapRotation(qFlat, safeFace);
+  const frames: DiceFrame[] = rawPos.map((p, i) => {
+    const q = rawQuat[i].clone().multiply(remap).normalize();
+    return {
+      pos: [p.x, p.y, p.z],
+      quat: [q.x, q.y, q.z, q.w],
+    };
+  });
 
   return {
-    frames: remappedFrames,
+    frames,
     bounceFrames,
-    settleFrame: totalFrames - 1,
-    durationMs: Math.round((totalFrames / fps) * 1000),
+    settleFrame,
+    durationMs: 1200,
   };
 }
 
 /**
- * Converts a unit quaternion [x, y, z, w] to a CSS `matrix3d(...)` string
- * in column-major order matching standard CSS 3D right-handed coordinates.
+ * Returns a resting quaternion with `face` pointing strictly up (+Y) and rotated
+ * by `yawRad` around world Y (~24 deg by default) so the top face and two bevelled
+ * side faces are clearly visible in 3D perspective.
  */
-export function quatToCssMatrix3d(quat: Quat): string {
-  const [x, y, z, w] = quatNormalize(quat);
-  const xx = x * x;
-  const yy = y * y;
-  const zz = z * z;
-  const xy = x * y;
-  const xz = x * z;
-  const yz = y * z;
-  const wx = w * x;
-  const wy = w * y;
-  const wz = w * z;
+export function getRestingDieQuaternion(face: number, yawRad = 0.42): Quat {
+  const safeFace = Math.min(6, Math.max(1, Math.round(face)));
+  const localNormal = LOCAL_FACE_NORMALS[safeFace] ?? LOCAL_FACE_NORMALS[1];
 
-  const m00 = 1 - 2 * (yy + zz);
-  const m01 = 2 * (xy - wz);
-  const m02 = 2 * (xz + wy);
+  const align = new THREE.Quaternion();
+  if (localNormal.dot(WORLD_UP) < -0.9999) {
+    align.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+  } else {
+    align.setFromUnitVectors(localNormal, WORLD_UP);
+  }
 
-  const m10 = 2 * (xy + wz);
-  const m11 = 1 - 2 * (xx + zz);
-  const m12 = 2 * (yz - wx);
+  const yaw = new THREE.Quaternion().setFromAxisAngle(WORLD_UP, yawRad);
+  const q = yaw.multiply(align).normalize();
+  return [q.x, q.y, q.z, q.w];
+}
 
-  const m20 = 2 * (xz - wy);
-  const m21 = 2 * (yz + wx);
-  const m22 = 1 - 2 * (xx + yy);
+/**
+ * Builds a bevelled/rounded cube geometry preserving Three.js BoxGeometry's 6 material groups.
+ */
+export function createRoundedDieGeometry(
+  size = 1.24,
+  radius = 0.14,
+  segments = 8,
+): THREE.BoxGeometry {
+  const geo = new THREE.BoxGeometry(size, size, size, segments, segments, segments);
+  const pos = geo.attributes.position;
+  const norm = geo.attributes.normal;
+  const half = size * 0.5;
+  const inner = half - radius;
+  const v = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const d = new THREE.Vector3();
 
-  const f = (n: number) => (Math.abs(n) < 1e-7 ? '0' : n.toFixed(6));
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    c.set(
+      THREE.MathUtils.clamp(v.x, -inner, inner),
+      THREE.MathUtils.clamp(v.y, -inner, inner),
+      THREE.MathUtils.clamp(v.z, -inner, inner),
+    );
+    d.subVectors(v, c);
+    if (d.lengthSq() > 1e-8) {
+      d.normalize();
+      pos.setXYZ(i, c.x + d.x * radius, c.y + d.y * radius, c.z + d.z * radius);
+      norm.setXYZ(i, d.x, d.y, d.z);
+    }
+  }
+  pos.needsUpdate = true;
+  norm.needsUpdate = true;
+  return geo;
+}
 
-  // Column-major order for CSS matrix3d
-  return `matrix3d(${f(m00)},${f(m10)},${f(m20)},0,${f(m01)},${f(m11)},${f(m21)},0,${f(m02)},${f(m12)},${f(m22)},0,0,0,0,1)`;
+function drawRoundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  if (typeof ctx.roundRect === 'function') {
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, r);
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+/**
+ * Generates a high-DPI procedural ivory face texture with bevel rim, subtle
+ * player-accent inner ring, and recessed shaded pips (crimson red 1 ace, espresso/slate 2-6).
+ */
+export function createDieFaceTexture(
+  value: number,
+  accentColor = '#d97706',
+): THREE.CanvasTexture {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  if (ctx) {
+    // Glossy warm ivory surface gradient
+    const bgGrad = ctx.createRadialGradient(
+      size * 0.32,
+      size * 0.28,
+      16,
+      size * 0.5,
+      size * 0.5,
+      size * 0.74,
+    );
+    bgGrad.addColorStop(0, '#fffefb');
+    bgGrad.addColorStop(0.62, '#fbf1dc');
+    bgGrad.addColorStop(1, '#e2cca1');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, size, size);
+
+    // Subtle beveled outer rim shading
+    const edgeGrad = ctx.createLinearGradient(0, 0, size, size);
+    edgeGrad.addColorStop(0, 'rgba(255, 255, 255, 0.72)');
+    edgeGrad.addColorStop(0.5, 'rgba(176, 138, 30, 0.12)');
+    edgeGrad.addColorStop(1, 'rgba(74, 44, 26, 0.26)');
+    ctx.strokeStyle = edgeGrad;
+    ctx.lineWidth = 14;
+    ctx.strokeRect(7, 7, size - 14, size - 14);
+
+    // Subtle active-player accent inner ring
+    ctx.save();
+    ctx.strokeStyle = accentColor;
+    ctx.globalAlpha = 0.26;
+    ctx.lineWidth = 4.5;
+    drawRoundedRectPath(ctx, 22, 22, size - 44, size - 44, 28);
+    ctx.stroke();
+    ctx.restore();
+
+    // Recessed shaded pips
+    const pips = PIP_COORDS[value] ?? PIP_COORDS[1];
+    const pipRadius = value === 1 ? 31 : 21;
+    for (const [px, py] of pips) {
+      const cx = px * size;
+      const cy = py * size;
+
+      // Bottom highlight rim for recessed depth
+      ctx.beginPath();
+      ctx.arc(cx, cy + 2.5, pipRadius + 1.6, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 252, 240, 0.85)';
+      ctx.fill();
+
+      // Subtle upper inner socket shadow
+      ctx.beginPath();
+      ctx.arc(cx, cy - 1.2, pipRadius + 0.8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(43, 29, 18, 0.32)';
+      ctx.fill();
+
+      // Pip body
+      const pipGrad = ctx.createRadialGradient(
+        cx - pipRadius * 0.22,
+        cy - pipRadius * 0.22,
+        pipRadius * 0.12,
+        cx,
+        cy,
+        pipRadius,
+      );
+      if (value === 1) {
+        pipGrad.addColorStop(0, '#f43f5e');
+        pipGrad.addColorStop(0.62, '#dc2626');
+        pipGrad.addColorStop(1, '#7f1d1d');
+      } else {
+        pipGrad.addColorStop(0, '#473328');
+        pipGrad.addColorStop(0.68, '#1e120a');
+        pipGrad.addColorStop(1, '#090503');
+      }
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, pipRadius, 0, Math.PI * 2);
+      ctx.fillStyle = pipGrad;
+      ctx.fill();
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
 }

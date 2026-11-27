@@ -32,7 +32,6 @@ const TileGrid = memo(function TileGrid({ portals }: { portals: PortalLink[] }) 
   }, [portals]);
 
   const tiles = useMemo(() => Array.from({ length: 100 }, (_, i) => getTileCoords(i + 1)), []);
-  const start = useMemo(() => getTileCoords(0), []);
 
   return (
     <div className="tile-grid">
@@ -46,6 +45,7 @@ const TileGrid = memo(function TileGrid({ portals }: { portals: PortalLink[] }) 
             style={{ left: `${c.x - 5}%`, top: `${c.y - 5}%` }}
           >
             <span className="tile-num">{c.tile}</span>
+            {c.tile === 1 && <span className="start-pad">START</span>}
             {c.tile === 100 && (
               <span className="tile-crown-icon">
                 <Crown />
@@ -60,9 +60,6 @@ const TileGrid = memo(function TileGrid({ portals }: { portals: PortalLink[] }) 
           </div>
         );
       })}
-      <div className="start-pad" style={{ left: `${start.x}%`, top: `${start.y}%` }}>
-        <span>START</span>
-      </div>
     </div>
   );
 });

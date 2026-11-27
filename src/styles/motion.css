@@ -314,25 +314,7 @@
   animation: fx-banner-pop 1.5s var(--ease-out) forwards;
 }
 
-/* ---------- Dice Tray Shake & Glow ---------- */
-@keyframes die-shake {
-  0% {
-    transform: translate3d(-4px, -3px, 14px) rotate3d(1, 0.6, 0.3, -18deg);
-  }
-  25% {
-    transform: translate3d(5px, 2px, 18px) rotate3d(-0.4, 1, 0.6, 20deg);
-  }
-  50% {
-    transform: translate3d(-3px, 4px, 12px) rotate3d(0.7, -0.5, 1, 16deg);
-  }
-  75% {
-    transform: translate3d(4px, -4px, 20px) rotate3d(-0.8, -0.4, 0.5, -22deg);
-  }
-  100% {
-    transform: translate3d(-4px, -3px, 14px) rotate3d(1, 0.6, 0.3, -18deg);
-  }
-}
-
+/* ---------- Dice Tray & UI Motion ---------- */
 @keyframes roll-btn-pulse {
   0%,
   100% {
@@ -374,10 +356,6 @@
   }
 }
 
-.dice-tray.is-shaking .die-shake-wrap {
-  animation: die-shake 0.16s linear infinite;
-}
-
 .roll-btn.is-ready:not(:disabled) {
   animation: roll-btn-pulse 1.9s var(--ease-in-out) infinite;
 }
@@ -404,7 +382,6 @@
   .pawn-anchor.is-active:not(.is-moving) .pawn-token,
   .pawn-dizzy,
   .board-surface.is-shaking,
-  .dice-tray.is-shaking .die-shake-wrap,
   .roll-btn.is-ready:not(:disabled),
   .modal {
     animation: none !important;

@@ -1,38 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import {
-  FACE_NORMALS,
-  quatToCssMatrix3d,
-  rotateVecByQuat,
+  DIE_HALF_EXTENT,
+  getRestingDieQuaternion,
+  LOCAL_FACE_NORMALS,
   simulateSingleDie,
-  type Vec3,
+  WORLD_UP,
 } from '@utils/dicePhysics';
 
-function parseCssMatrix3d(css: string): number[] {
-  const match = css.match(/^matrix3d\(([^)]+)\)$/);
-  if (!match) {
-    throw new Error(`Invalid CSS matrix3d string: ${css}`);
-  }
-  const nums = match[1].split(',').map((s) => Number(s.trim()));
-  expect(nums).toHaveLength(16);
-  for (const n of nums) {
-    expect(Number.isFinite(n)).toBe(true);
-  }
-  return nums;
-}
-
-/**
- * Applies a CSS column-major 4x4 matrix3d to a 3D direction vector.
- * Columns are [0..3], [4..7], [8..11], [12..15].
- */
-function transformDirByCssMatrix(m: number[], v: Vec3): Vec3 {
-  return [
-    m[0] * v[0] + m[4] * v[1] + m[8] * v[2],
-    m[1] * v[0] + m[5] * v[1] + m[9] * v[2],
-    m[2] * v[0] + m[6] * v[1] + m[10] * v[2],
-  ];
-}
-
-describe('3D dice physics & cube rotation group remapping', () => {
+describe('3D cannon-es rigid-body dice physics & cube rotation group remapping', () => {
   const seeds = [
     'roll_alpha',
     'roll_beta',
@@ -46,45 +22,62 @@ describe('3D dice physics & cube rotation group remapping', () => {
     'classic_test_10',
   ];
 
-  it('lands flat with targetFace strictly facing +Z for all 6 faces across diverse seeds', () => {
+  it('lands flat at y = DIE_HALF_EXTENT with targetFace strictly pointing +Y (WORLD_UP) for all 6 faces across 10 seeds', () => {
     for (let targetFace = 1; targetFace <= 6; targetFace++) {
       for (const seed of seeds) {
         const sim = simulateSingleDie(seed, targetFace);
 
-        expect(sim.frames.length).toBeGreaterThan(30);
+        expect(sim.frames).toHaveLength(72);
         expect(sim.bounceFrames.length).toBeGreaterThanOrEqual(1);
-        expect(sim.settleFrame).toBe(sim.frames.length - 1);
-        expect(sim.durationMs).toBeGreaterThan(500);
+        expect(sim.settleFrame).toBe(66);
+        expect(sim.durationMs).toBe(1200);
 
-        const finalFrame = sim.frames[sim.settleFrame];
-        expect(finalFrame.z).toBe(0);
+        for (const frameIdx of [sim.settleFrame, sim.frames.length - 1]) {
+          const finalFrame = sim.frames[frameIdx];
 
-        // 1) Verify via quaternion rotation directly
-        const targetNormal = FACE_NORMALS[targetFace];
-        const worldViaQuat = rotateVecByQuat(targetNormal, finalFrame.quat);
-        expect(worldViaQuat[0]).toBeCloseTo(0, 4);
-        expect(worldViaQuat[1]).toBeCloseTo(0, 4);
-        expect(worldViaQuat[2]).toBeCloseTo(1, 4);
+          // Resting position lies cleanly on the tray floor inside clamped bounds
+          expect(finalFrame.pos[0]).toBeGreaterThanOrEqual(-0.45);
+          expect(finalFrame.pos[0]).toBeLessThanOrEqual(0.45);
+          expect(finalFrame.pos[1]).toBeCloseTo(DIE_HALF_EXTENT, 5);
+          expect(finalFrame.pos[2]).toBeGreaterThanOrEqual(-0.35);
+          expect(finalFrame.pos[2]).toBeLessThanOrEqual(0.35);
 
-        // 2) Verify via CSS matrix3d output (exact column-major transform used by browser)
-        const css = quatToCssMatrix3d(finalFrame.quat);
-        const m = parseCssMatrix3d(css);
-        const worldViaCss = transformDirByCssMatrix(m, targetNormal);
-        expect(worldViaCss[0]).toBeCloseTo(0, 4);
-        expect(worldViaCss[1]).toBeCloseTo(0, 4);
-        expect(worldViaCss[2]).toBeCloseTo(1, 4);
+          const q = new THREE.Quaternion(...finalFrame.quat);
 
-        // 3) Verify opposite face points strictly -Z and side faces lie strictly flat (z ~ 0)
-        const oppositeFace = 7 - targetFace;
-        const oppWorld = transformDirByCssMatrix(m, FACE_NORMALS[oppositeFace]);
-        expect(oppWorld[2]).toBeCloseTo(-1, 4);
+          // Target face points strictly straight up (0, +1, 0)
+          const targetWorld = LOCAL_FACE_NORMALS[targetFace].clone().applyQuaternion(q);
+          expect(targetWorld.x).toBeCloseTo(WORLD_UP.x, 4);
+          expect(targetWorld.y).toBeCloseTo(WORLD_UP.y, 4);
+          expect(targetWorld.z).toBeCloseTo(WORLD_UP.z, 4);
 
-        for (let other = 1; other <= 6; other++) {
-          if (other === targetFace || other === oppositeFace) continue;
-          const sideWorld = transformDirByCssMatrix(m, FACE_NORMALS[other]);
-          expect(Math.abs(sideWorld[2])).toBeLessThan(1e-4);
+          // Opposite face points strictly down (0, -1, 0)
+          const oppositeFace = 7 - targetFace;
+          const oppWorld = LOCAL_FACE_NORMALS[oppositeFace].clone().applyQuaternion(q);
+          expect(oppWorld.x).toBeCloseTo(0, 4);
+          expect(oppWorld.y).toBeCloseTo(-1, 4);
+          expect(oppWorld.z).toBeCloseTo(0, 4);
+
+          // All 4 side faces lie strictly flat (|y| < 1e-4)
+          for (let other = 1; other <= 6; other++) {
+            if (other === targetFace || other === oppositeFace) continue;
+            const sideWorld = LOCAL_FACE_NORMALS[other].clone().applyQuaternion(q);
+            expect(Math.abs(sideWorld.y)).toBeLessThan(1e-4);
+          }
         }
       }
+    }
+  });
+
+  it('produces valid resting quaternions pointing each face +Y with natural 3D yaw', () => {
+    for (let face = 1; face <= 6; face++) {
+      const q = new THREE.Quaternion(...getRestingDieQuaternion(face, 0.42));
+      const up = LOCAL_FACE_NORMALS[face].clone().applyQuaternion(q);
+      expect(up.x).toBeCloseTo(0, 5);
+      expect(up.y).toBeCloseTo(1, 5);
+      expect(up.z).toBeCloseTo(0, 5);
+
+      const opp = LOCAL_FACE_NORMALS[7 - face].clone().applyQuaternion(q);
+      expect(opp.y).toBeCloseTo(-1, 5);
     }
   });
 

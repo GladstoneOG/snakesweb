@@ -318,7 +318,7 @@ export function computePawnPositions(
     const offs = CLUSTER_OFFSETS[Math.min(ids.length, 6) - 1];
     ids.forEach((id, i) => {
       const o = offs[i % offs.length];
-      const scale = tile === 0 ? 1.15 : 1;
+      const scale = tile === 0 ? 0.85 : 1;
       out[id] = { x: c.x + o.x * scale, y: c.y + o.y * scale };
     });
   });

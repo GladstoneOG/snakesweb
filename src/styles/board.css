@@ -219,22 +219,26 @@
   background: radial-gradient(circle, rgba(194, 69, 58, 0.2) 0%, transparent 72%);
 }
 
-/* ---------- Start Pad (tile 0) ---------- */
+/* ---------- Start Pad (inside Tile 1) ---------- */
 .start-pad {
   position: absolute;
-  transform: translate(-50%, -50%);
-  padding: 2px 7px;
+  left: 50%;
+  bottom: 10%;
+  transform: translateX(-50%);
+  padding: clamp(1px, 0.25vw, 2.5px) clamp(3.5px, 0.7vw, 7px);
   border-radius: var(--r-pill);
   background: var(--grad-brass);
   color: var(--walnut-900);
   font-family: var(--font-display);
-  font-size: clamp(7px, 0.95vw, 10px);
+  font-size: clamp(5.5px, 0.85vw, 9.5px);
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
+  line-height: 1.1;
+  white-space: nowrap;
   box-shadow: 0 1px 4px rgba(26, 15, 9, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.65);
   pointer-events: none;
   z-index: 1;
-  opacity: 0.88;
+  opacity: 0.9;
 }
 
 /* ---------- SVG Snakes & Ladders Layer ---------- */

@@ -95,15 +95,18 @@ export function estimateMoveAnimDurationMs(opts: {
   hasPortal: boolean;
   bumpCount: number;
   tripleSixBust: boolean;
+  grantedExtraRoll?: boolean;
 }): number {
   if (opts.tripleSixBust) {
-    return 1250;
+    return 1980;
   }
-  const diceMs = 1050;
-  const hopMs = opts.stepCount * 165;
-  const portalMs = opts.hasPortal ? 880 : 0;
-  const bumpMs = opts.bumpCount > 0 ? 320 : 0;
-  return diceMs + hopMs + portalMs + bumpMs + 180;
+  return (
+    1420 +
+    opts.stepCount * 220 +
+    (opts.hasPortal ? 1380 : 0) +
+    (opts.bumpCount > 0 ? 450 : 0) +
+    (opts.grantedExtraRoll ? 320 : 0)
+  );
 }
 
 export function getAnimationCompleteAt(move: TurnMoveEvent | null): number {
@@ -820,13 +823,14 @@ export class SnakesHostEngine {
     }
 
     const wonGame = finalTile === 100;
-    let grantedExtraRoll = false;
+    const grantedExtraRoll = !wonGame && dice === 6 && rules.extraRollOnSix;
 
     const animDurationMs = estimateMoveAnimDurationMs({
       stepCount: stepPath.length,
       hasPortal: Boolean(portal),
       bumpCount: bumped.length,
       tripleSixBust: false,
+      grantedExtraRoll,
     });
 
     if (wonGame) {
@@ -841,8 +845,7 @@ export class SnakesHostEngine {
         .sort((a, b) => b.tile - a.tile || b.stats.laddersClimbed - a.stats.laddersClimbed)
         .map((p) => p.id);
       this.state.podium = [player.id, ...others];
-    } else if (dice === 6 && rules.extraRollOnSix) {
-      grantedExtraRoll = true;
+    } else if (grantedExtraRoll) {
       this.state.consecutiveSixes += 1;
       this.state.turnNumber += 1;
       this.state.turnDeadline = this.computeTurnDeadline(now, animDurationMs);
