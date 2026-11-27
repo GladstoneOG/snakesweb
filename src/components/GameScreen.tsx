@@ -793,7 +793,7 @@ export function GameScreen({ room, transport, error, onIntent, onLeave }: GameSc
 
                     <div className="roster-sub-row">
                       <span className="roster-tile">
-                        {shownTile === 0 ? 'Start' : `Tile ${shownTile}`}
+                        {shownTile <= 1 ? 'Tile 1' : `Tile ${shownTile}`}
                       </span>
                       {isTurn && turnTimer ? (
                         <span className={`roster-timer-num${turnTimer.urgent ? ' is-urgent' : ''}`}>

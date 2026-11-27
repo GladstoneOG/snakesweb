@@ -113,10 +113,32 @@ describe('SnakesHostEngine rules & multiplayer lifecycle', () => {
     expect(engine.addBot('h1').ok).toBe(false);
   });
 
+  it('starts on tile 1 so rolling N moves from x to x + N', () => {
+    const engine = createTwoPlayerGame();
+    const [p1, p2] = engine.getState().players;
+    expect(p1.tile).toBe(1);
+    expect(p2.tile).toBe(1);
+
+    // Rolling 1 at tile 1 moves to tile 2
+    expect(engine.rollDice('p1', 1).ok).toBe(true);
+    const move1 = engine.getState().lastMove!;
+    expect(move1.startTile).toBe(1);
+    expect(move1.stepPath).toEqual([2]);
+    expect(p1.tile).toBe(2);
+
+    // Rolling 3 from tile 1 lands on tile 4 (climbing 4 -> 14)
+    expect(engine.rollDice(p2.id, 3).ok).toBe(true);
+    const move2 = engine.getState().lastMove!;
+    expect(move2.startTile).toBe(1);
+    expect(move2.stepPath).toEqual([2, 3, 4]);
+    expect(move2.portal).toMatchObject({ type: 'ladder', from: 4, to: 14 });
+    expect(p2.tile).toBe(14);
+  });
+
   it('climbs ladders, slides down snakes, and records stats', () => {
     const engine = createTwoPlayerGame();
-    // Classic has ladder 4 -> 14
-    expect(engine.rollDice('p1', 4).ok).toBe(true);
+    // Classic has ladder 4 -> 14 (from tile 1, roll 3 -> 4 -> 14)
+    expect(engine.rollDice('p1', 3).ok).toBe(true);
     const state1 = engine.getState();
     expect(state1.players[0].tile).toBe(14);
     expect(state1.players[0].stats.laddersClimbed).toBe(1);
@@ -195,6 +217,14 @@ describe('SnakesHostEngine rules & multiplayer lifecycle', () => {
     expect(p2.tile).toBe(13 - BUMP_KNOCKBACK_TILES);
     expect(p1.stats.bumpsGiven).toBe(1);
     expect(p2.stats.bumpsTaken).toBe(1);
+
+    // Bump near start clamps to tile 1 (never 0)
+    const engine2 = createTwoPlayerGame({ enableBump: true });
+    const [a, b] = engine2.getState().players;
+    a.tile = 1;
+    b.tile = 3;
+    expect(engine2.rollDice('p1', 2).ok).toBe(true);
+    expect(b.tile).toBe(1);
   });
 
   it('supports 30s reconnect grace, session restore, and host migration', () => {

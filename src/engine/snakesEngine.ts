@@ -138,7 +138,7 @@ export class SnakesHostEngine {
       reconnectGraceUntil: null,
       autoPlay: false,
       transport: init.mode === 'multiplayer' ? 'online' : 'local',
-      tile: 0,
+      tile: 1,
       wins: 0,
       stats: emptyStats(),
     };
@@ -312,7 +312,7 @@ export class SnakesHostEngine {
       reconnectGraceUntil: null,
       autoPlay: false,
       transport,
-      tile: 0,
+      tile: 1,
       wins: 0,
       stats: emptyStats(),
     };
@@ -454,7 +454,7 @@ export class SnakesHostEngine {
       reconnectGraceUntil: null,
       autoPlay: false,
       transport: 'local',
-      tile: 0,
+      tile: 1,
       wins: 0,
       stats: emptyStats(),
     };
@@ -493,7 +493,7 @@ export class SnakesHostEngine {
       reconnectGraceUntil: null,
       autoPlay: false,
       transport: 'local',
-      tile: 0,
+      tile: 1,
       wins: 0,
       stats: emptyStats(),
     };
@@ -658,7 +658,7 @@ export class SnakesHostEngine {
     this.state.portals = getPortalsForRules(this.state.rules.boardPreset, this.state.boardSeed);
 
     for (const p of this.state.players) {
-      p.tile = 0;
+      p.tile = 1;
       p.stats = emptyStats();
     }
 
@@ -802,13 +802,13 @@ export class SnakesHostEngine {
 
     player.tile = finalTile;
 
-    // Check opponent bumps on finalTile (excluding Start Pad 0 and Finish 100)
+    // Check opponent bumps on finalTile (excluding Start Tile 1 and Finish 100)
     const bumped: BumpedEntry[] = [];
-    if (rules.enableBump && finalTile > 0 && finalTile < 100) {
+    if (rules.enableBump && finalTile > 1 && finalTile < 100) {
       for (const other of this.state.players) {
         if (other.id === player.id) continue;
         if (other.tile === finalTile) {
-          const toTile = Math.max(0, other.tile - BUMP_KNOCKBACK_TILES);
+          const toTile = Math.max(1, other.tile - BUMP_KNOCKBACK_TILES);
           bumped.push({
             playerId: other.id,
             playerName: other.name,
@@ -951,7 +951,7 @@ export class SnakesHostEngine {
     // Clean up any long-disconnected players when returning to lobby
     this.state.players = this.state.players.filter((p) => p.isBot || !p.disconnected);
     for (const p of this.state.players) {
-      p.tile = 0;
+      p.tile = 1;
       p.autoPlay = false;
       p.stats = emptyStats();
       p.isReady = p.isHost || p.isBot || this.state.mode !== 'multiplayer';

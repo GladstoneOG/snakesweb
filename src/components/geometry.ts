@@ -307,7 +307,7 @@ export function computePawnPositions(
 ): Record<string, Pt> {
   const groups = new Map<number, string[]>();
   for (const p of players) {
-    const t = tiles[p.id] ?? 0;
+    const t = tiles[p.id] ?? 1;
     const g = groups.get(t);
     if (g) g.push(p.id);
     else groups.set(t, [p.id]);
@@ -318,7 +318,7 @@ export function computePawnPositions(
     const offs = CLUSTER_OFFSETS[Math.min(ids.length, 6) - 1];
     ids.forEach((id, i) => {
       const o = offs[i % offs.length];
-      const scale = tile === 0 ? 0.85 : 1;
+      const scale = tile <= 1 ? 0.85 : 1;
       out[id] = { x: c.x + o.x * scale, y: c.y + o.y * scale };
     });
   });
